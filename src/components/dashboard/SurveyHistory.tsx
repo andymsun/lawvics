@@ -3,6 +3,7 @@
 import { useSurveyHistoryStore, SurveyRecord, useShallow } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { Clock, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { ExportButton } from './ExportButton';
 
 function formatTime(timestamp: number): string {
     const now = Date.now();
@@ -56,57 +57,62 @@ export function SurveyHistory() {
     const activeSurveyId = useSurveyHistoryStore((state) => state.activeSurveyId);
     const setActiveSurvey = useSurveyHistoryStore((state) => state.setActiveSurvey);
 
-    if (surveys.length === 0) {
-        return (
-            <div className="p-6 text-center text-muted-foreground">
-                <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No surveys yet</p>
-                <p className="text-xs mt-1">Run a search to get started</p>
-            </div>
-        );
-    }
-
     return (
-        <div className="space-y-2">
-            {surveys.map((survey) => (
-                <button
-                    key={survey.id}
-                    onClick={() => setActiveSurvey(survey.id)}
-                    className={cn(
-                        'w-full text-left p-3 rounded-lg border transition-colors',
-                        activeSurveyId === survey.id
-                            ? 'bg-primary/5 border-primary/30'
-                            : 'bg-card border-border hover:bg-muted'
-                    )}
-                >
-                    <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs font-mono text-muted-foreground">
-                                    #{survey.id}
-                                </span>
-                                <StatusBadge
-                                    status={survey.status}
-                                    progress={survey.status === 'running' ? Math.round((Object.keys(survey.statutes || {}).length / 50) * 100) : undefined}
-                                />
+        <div className="space-y-4">
+            <div className="flex items-center justify-between px-1">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">History</h3>
+                <ExportButton data={surveys} type="history" />
+            </div>
+
+            {surveys.length === 0 ? (
+                <div className="p-6 text-center text-muted-foreground border border-dashed rounded-lg">
+                    <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No surveys yet</p>
+                    <p className="text-xs mt-1">Run a search to get started</p>
+                </div>
+            ) : (
+                <div className="space-y-2">
+                    {surveys.map((survey) => (
+                        <button
+                            key={survey.id}
+                            onClick={() => setActiveSurvey(survey.id)}
+                            className={cn(
+                                'w-full text-left p-3 rounded-lg border transition-colors',
+                                activeSurveyId === survey.id
+                                    ? 'bg-primary/5 border-primary/30'
+                                    : 'bg-card border-border hover:bg-muted'
+                            )}
+                        >
+                            <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs font-mono text-muted-foreground">
+                                            #{survey.id}
+                                        </span>
+                                        <StatusBadge
+                                            status={survey.status}
+                                            progress={survey.status === 'running' ? Math.round((Object.keys(survey.statutes || {}).length / 50) * 100) : undefined}
+                                        />
+                                    </div>
+                                    <p className="mt-1 text-sm font-medium truncate">
+                                        {survey.query}
+                                    </p>
+                                    <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+                                        <span>{formatTime(survey.startedAt)}</span>
+                                        {survey.status !== 'running' && (
+                                            <>
+                                                <span>•</span>
+                                                <span className="text-green-500">{survey.successCount} success</span>
+                                                <span className="text-red-500">{survey.errorCount} errors</span>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
-                            <p className="mt-1 text-sm font-medium truncate">
-                                {survey.query}
-                            </p>
-                            <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
-                                <span>{formatTime(survey.startedAt)}</span>
-                                {survey.status !== 'running' && (
-                                    <>
-                                        <span>•</span>
-                                        <span className="text-green-500">{survey.successCount} success</span>
-                                        <span className="text-red-500">{survey.errorCount} errors</span>
-                                    </>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </button>
-            ))}
+                        </button>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
