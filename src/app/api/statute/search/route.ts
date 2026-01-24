@@ -14,7 +14,7 @@ const cleanText = "Debug: Cheerio disabled"; // Placeholder
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Force edge runtime for Cloudflare Pages
-// export const runtime = 'edge'; // Removed to rely on nodejs_compat via next-on-pages
+export const runtime = 'edge';
 
 // ============================================================
 // Debug Logger (hidden behind DEBUG_MODE)
