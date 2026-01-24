@@ -135,6 +135,7 @@ export interface SurveyRecord {
 interface SurveyHistoryState {
     surveys: SurveyRecord[];
     activeSurveyId: number | null;
+    activeStateCode: StateCode | null;
 }
 
 interface SurveyHistoryActions {
@@ -142,6 +143,7 @@ interface SurveyHistoryActions {
     updateSurvey: (id: number, update: Partial<SurveyRecord>) => void;
     completeSurvey: (id: number, successCount: number, errorCount: number) => void;
     setActiveSurvey: (id: number | null) => void;
+    setActiveState: (code: StateCode | null) => void;
     /** Set a statute result for a specific session */
     setSessionStatute: (surveyId: number, stateCode: StateCode, data: StatuteType) => void;
     /** Set an error for a specific session */
@@ -155,6 +157,7 @@ let surveyId = 100; // Start from 100 for "Survey #101" etc.
 export const useSurveyHistoryStore = create<SurveyHistoryStore>((set, get) => ({
     surveys: [],
     activeSurveyId: null,
+    activeStateCode: null,
 
     startSurvey: (query) => {
         const id = ++surveyId;
@@ -227,6 +230,9 @@ export const useSurveyHistoryStore = create<SurveyHistoryStore>((set, get) => ({
                     : s
             ),
         })),
+
+    // UI Actions
+    setActiveState: (code) => set({ activeStateCode: code }),
 }));
 
 /** Selector: Count of currently running surveys */

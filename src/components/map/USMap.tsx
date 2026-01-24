@@ -110,6 +110,8 @@ export default function USMap({ onStateClick }: USMapProps) {
         [statutes, colors]
     );
 
+    const setActiveState = useSurveyHistoryStore((state) => state.setActiveState);
+
     /**
      * Handle click on a state
      */
@@ -121,9 +123,10 @@ export default function USMap({ onStateClick }: USMapProps) {
                 return;
             }
             console.log(`[USMap] Clicked state: ${stateCode}`);
-            onStateClick?.(stateCode);
+            setActiveState(stateCode); // Set in global store
+            onStateClick?.(stateCode); // Also call prop if provided
         },
-        [onStateClick, hasDragged]
+        [onStateClick, hasDragged, setActiveState]
     );
 
     /**
