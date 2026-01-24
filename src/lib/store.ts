@@ -300,3 +300,98 @@ export const useLegalStore = create<LegalStore & StoreActions>((set) => ({
     reset: () => set({ results: initialState })
 }));
 
+// ============================================================
+// Settings Store (useSettingsStore)
+// ============================================================
+
+export interface SettingsState {
+    /** Use mock data for fast testing (default: true) */
+    enableMockMode: boolean;
+    /** User's OpenAI API key for BYOK (stored in localStorage) */
+    openaiApiKey: string;
+    /** Enable simultaneous queries across all 50 jurisdictions */
+    parallelFetch: boolean;
+    /** Automatically run verification checks on returned statutes */
+    autoVerify: boolean;
+    /** Display confidence percentages and trust badges */
+    showConfidence: boolean;
+    /** Store verified results locally (experimental) */
+    cacheResults: boolean;
+}
+
+interface SettingsActions {
+    /** Toggle mock mode on/off */
+    setEnableMockMode: (enabled: boolean) => void;
+    /** Set the OpenAI API key (BYOK) */
+    setApiKey: (key: string) => void;
+    /** Update any boolean setting */
+    setSetting: <K extends keyof Omit<SettingsState, 'openaiApiKey'>>(key: K, value: SettingsState[K]) => void;
+    /** Toggle a boolean setting */
+    toggleSetting: (key: keyof Omit<SettingsState, 'openaiApiKey'>) => void;
+}
+
+export type SettingsStore = SettingsState & SettingsActions;
+
+const DEFAULT_SETTINGS: SettingsState = {
+    enableMockMode: true,
+    openaiApiKey: '',
+    parallelFetch: true,
+    autoVerify: true,
+    showConfidence: true,
+    cacheResults: false,
+};
+
+/**
+ * Load settings from localStorage (client-side only)
+ */
+function loadPersistedSettings(): SettingsState {
+    if (typeof window === 'undefined') {
+        return DEFAULT_SETTINGS;
+    }
+    try {
+        const stored = localStorage.getItem('lawvics-settings');
+        if (stored) {
+            return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+        }
+    } catch {
+        // Ignore localStorage errors
+    }
+    return DEFAULT_SETTINGS;
+}
+
+/**
+ * Save settings to localStorage
+ */
+function persistSettings(settings: SettingsState): void {
+    if (typeof window === 'undefined') return;
+    try {
+        localStorage.setItem('lawvics-settings', JSON.stringify(settings));
+    } catch {
+        // Ignore localStorage errors
+    }
+}
+
+export const useSettingsStore = create<SettingsStore>((set, get) => ({
+    ...loadPersistedSettings(),
+
+    setEnableMockMode: (enabled) => {
+        set({ enableMockMode: enabled });
+        persistSettings(get());
+    },
+
+    setApiKey: (key) => {
+        set({ openaiApiKey: key });
+        persistSettings(get());
+    },
+
+    setSetting: (key, value) => {
+        set({ [key]: value } as Partial<SettingsState>);
+        persistSettings(get());
+    },
+
+    toggleSetting: (key) => {
+        const current = get()[key];
+        set({ [key]: !current } as Partial<SettingsState>);
+        persistSettings(get());
+    },
+}));

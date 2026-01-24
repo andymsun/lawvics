@@ -1,30 +1,33 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, X, Settings, Zap } from 'lucide-react';
+import { X, Settings, Zap, AlertTriangle, Key, Eye, EyeOff } from 'lucide-react';
+import { useSettingsStore } from '@/lib/store';
 
 // ============================================================
-// Premium Checkbox Component
+// Premium Toggle Switch Component
 // ============================================================
 
-interface PremiumCheckboxProps {
+interface PremiumToggleProps {
     id: string;
     label: string;
     description?: string;
     checked: boolean;
     onChange: () => void;
     disabled?: boolean;
+    warning?: string;
 }
 
-const PremiumCheckbox = ({
+const PremiumToggle = ({
     id,
     label,
     description,
     checked,
     onChange,
     disabled = false,
-}: PremiumCheckboxProps) => {
+    warning,
+}: PremiumToggleProps) => {
     return (
         <div className="relative">
             <label
@@ -32,7 +35,7 @@ const PremiumCheckbox = ({
                 className={`flex items-start gap-6 cursor-pointer group ${disabled ? 'opacity-50 cursor-not-allowed' : ''
                     }`}
             >
-                {/* Checkbox Container */}
+                {/* Toggle Switch Container */}
                 <div className="relative flex items-center justify-center mt-1">
                     <input
                         id={id}
@@ -43,42 +46,33 @@ const PremiumCheckbox = ({
                         className="sr-only"
                     />
 
-                    {/* Custom checkbox visual - uses semantic colors */}
+                    {/* Custom toggle switch */}
                     <motion.div
                         className={`
-              w-7 h-7 rounded-lg border-2 flex items-center justify-center
-              transition-colors duration-300
-              ${checked
-                                ? 'bg-primary border-primary'
-                                : 'bg-card border-border group-hover:border-muted-foreground'
+                            w-14 h-8 rounded-full flex items-center px-1
+                            transition-colors duration-300
+                            ${checked
+                                ? 'bg-primary'
+                                : 'bg-muted border border-border group-hover:border-muted-foreground'
                             }
-            `}
-                        whileHover={!disabled ? { scale: 1.05 } : {}}
-                        whileTap={!disabled ? { scale: 0.95 } : {}}
+                        `}
+                        whileHover={!disabled ? { scale: 1.02 } : {}}
+                        whileTap={!disabled ? { scale: 0.98 } : {}}
                     >
-                        <AnimatePresence mode="wait">
-                            {checked && (
-                                <motion.div
-                                    initial={{ scale: 0, opacity: 0 }}
-                                    animate={{ scale: 1, opacity: 1 }}
-                                    exit={{ scale: 0, opacity: 0 }}
-                                    transition={{
-                                        type: 'spring',
-                                        stiffness: 500,
-                                        damping: 25,
-                                    }}
-                                >
-                                    <Check className="w-5 h-5 text-primary-foreground stroke-[3]" />
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
+                        <motion.div
+                            className={`
+                                w-6 h-6 rounded-full shadow-md
+                                ${checked ? 'bg-primary-foreground' : 'bg-foreground/80'}
+                            `}
+                            animate={{ x: checked ? 24 : 0 }}
+                            transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                        />
                     </motion.div>
 
                     {/* Glow effect on hover */}
                     {!disabled && (
                         <motion.div
-                            className="absolute inset-0 rounded-lg bg-primary opacity-0 group-hover:opacity-20 transition-opacity duration-300"
-                            style={{ filter: 'blur(8px)' }}
+                            className="absolute inset-0 rounded-full bg-primary opacity-0 group-hover:opacity-20 transition-opacity duration-300 blur-md"
                         />
                     )}
                 </div>
@@ -93,8 +87,79 @@ const PremiumCheckbox = ({
                             {description}
                         </div>
                     )}
+                    {warning && !checked && (
+                        <div className="flex items-center gap-2 text-amber-500 text-sm mt-2">
+                            <AlertTriangle className="w-4 h-4" />
+                            <span>{warning}</span>
+                        </div>
+                    )}
                 </div>
             </label>
+        </div>
+    );
+};
+
+// ============================================================
+// API Key Input Component
+// ============================================================
+
+interface ApiKeyInputProps {
+    value: string;
+    onChange: (key: string) => void;
+}
+
+const ApiKeyInput = ({ value, onChange }: ApiKeyInputProps) => {
+    const [showKey, setShowKey] = React.useState(false);
+    const hasKey = value.length > 0;
+
+    return (
+        <div className="space-y-3 pt-4 border-t border-border">
+            <div className="flex items-start gap-6">
+                <div className="p-2 rounded-lg bg-amber-500/10 mt-1">
+                    <Key className="w-5 h-5 text-amber-500" />
+                </div>
+                <div className="flex-1 space-y-3">
+                    <div>
+                        <div className="text-foreground font-medium text-lg tracking-wide">
+                            OpenAI API Key
+                        </div>
+                        <div className="text-muted-foreground text-sm leading-relaxed mt-1">
+                            Required for LLM-based statute verification in Real Mode.
+                        </div>
+                    </div>
+
+                    {/* Input with visibility toggle */}
+                    <div className="relative">
+                        <input
+                            type={showKey ? 'text' : 'password'}
+                            value={value}
+                            onChange={(e) => onChange(e.target.value)}
+                            placeholder="sk-..."
+                            className="w-full px-4 py-3 pr-12 bg-muted border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all font-mono text-sm"
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setShowKey(!showKey)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                            {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                    </div>
+
+                    {/* Warning if empty */}
+                    {!hasKey && (
+                        <div className="flex items-center gap-2 text-amber-500 text-sm">
+                            <AlertTriangle className="w-4 h-4" />
+                            <span>Real Mode requires a valid OpenAI API Key.</span>
+                        </div>
+                    )}
+
+                    {/* Security helper text */}
+                    <div className="text-xs text-muted-foreground italic">
+                        Your key is stored locally in your browser and only used for verification.
+                    </div>
+                </div>
+            </div>
         </div>
     );
 };
@@ -109,13 +174,10 @@ const GridBackground = () => {
             {/* Vertical lines */}
             <div className="absolute inset-0">
                 {[...Array(20)].map((_, i) => (
-                    <motion.div
+                    <div
                         key={`v-${i}`}
-                        className="absolute top-0 bottom-0 w-px bg-border"
+                        className="absolute top-0 bottom-0 w-px bg-border opacity-30"
                         style={{ left: `${(i + 1) * 5}%` }}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 0.3 }}
-                        transition={{ delay: i * 0.02 }}
                     />
                 ))}
             </div>
@@ -123,13 +185,10 @@ const GridBackground = () => {
             {/* Horizontal lines */}
             <div className="absolute inset-0">
                 {[...Array(20)].map((_, i) => (
-                    <motion.div
+                    <div
                         key={`h-${i}`}
-                        className="absolute left-0 right-0 h-px bg-border"
+                        className="absolute left-0 right-0 h-px bg-border opacity-30"
                         style={{ top: `${(i + 1) * 5}%` }}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 0.3 }}
-                        transition={{ delay: i * 0.02 }}
                     />
                 ))}
             </div>
@@ -146,19 +205,24 @@ interface SettingsModalProps {
     onClose: () => void;
 }
 
+interface SettingOption {
+    id: 'enableMockMode' | 'parallelFetch' | 'autoVerify' | 'showConfidence' | 'cacheResults';
+    label: string;
+    description: string;
+    warning?: string;
+}
+
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
-    const [settings, setSettings] = useState({
-        parallelFetch: true,
-        autoVerify: true,
-        showConfidence: true,
-        cacheResults: false,
-    });
+    const settings = useSettingsStore();
 
-    const handleSettingChange = (key: keyof typeof settings) => {
-        setSettings((prev) => ({ ...prev, [key]: !prev[key] }));
-    };
-
-    const options = [
+    const options: SettingOption[] = [
+        {
+            id: 'enableMockMode',
+            label: 'Mock Data Mode',
+            description:
+                'Use simulated data for fast testing (~1-2 seconds per survey). Disable for real web scraping.',
+            warning: 'Real mode is significantly slower (30+ seconds) and requires API keys.',
+        },
         {
             id: 'parallelFetch',
             label: 'Parallel Fetching',
@@ -258,38 +322,59 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                                 ease: [0.22, 1, 0.36, 1],
                                             }}
                                         >
-                                            <PremiumCheckbox
+                                            <PremiumToggle
                                                 id={option.id}
                                                 label={option.label}
                                                 description={option.description}
-                                                checked={settings[option.id as keyof typeof settings]}
-                                                onChange={() =>
-                                                    handleSettingChange(option.id as keyof typeof settings)
-                                                }
+                                                warning={option.warning}
+                                                checked={settings[option.id] as boolean}
+                                                onChange={() => settings.toggleSetting(option.id)}
                                             />
                                         </motion.div>
                                     ))}
+
+                                    {/* API Key Section - Only visible when Mock Mode is OFF */}
+                                    <AnimatePresence>
+                                        {!settings.enableMockMode && (
+                                            <motion.div
+                                                initial={{ opacity: 0, height: 0 }}
+                                                animate={{ opacity: 1, height: 'auto' }}
+                                                exit={{ opacity: 0, height: 0 }}
+                                                transition={{ duration: 0.3 }}
+                                            >
+                                                <ApiKeyInput
+                                                    value={settings.openaiApiKey}
+                                                    onChange={(key) => settings.setApiKey(key)}
+                                                />
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
                                 </div>
                             </div>
 
                             {/* Footer */}
                             <div className="flex-shrink-0 p-6 border-t border-border bg-muted/30">
-                                <div className="flex justify-end gap-3">
-                                    <motion.button
-                                        whileHover={{ scale: 1.02 }}
-                                        whileTap={{ scale: 0.98 }}
-                                        onClick={onClose}
-                                        className="px-6 py-3 text-muted-foreground font-medium rounded-lg hover:bg-muted transition-colors"
-                                    >
-                                        Cancel
-                                    </motion.button>
+                                <div className="flex justify-between items-center">
+                                    <div className="text-sm text-muted-foreground">
+                                        {settings.enableMockMode ? (
+                                            <span className="flex items-center gap-2">
+                                                <span className="w-2 h-2 rounded-full bg-green-500" />
+                                                Mock Mode Active
+                                            </span>
+                                        ) : (
+                                            <span className="flex items-center gap-2 text-amber-500">
+                                                <span className="w-2 h-2 rounded-full bg-amber-500" />
+                                                Real Mode (Slower)
+                                            </span>
+                                        )}
+                                    </div>
                                     <motion.button
                                         whileHover={{ scale: 1.02 }}
                                         whileTap={{ scale: 0.98 }}
                                         onClick={onClose}
                                         className="px-6 py-3 bg-primary text-primary-foreground font-medium rounded-lg hover:opacity-90 transition-opacity"
                                     >
-                                        Save Preferences
+                                        Done
                                     </motion.button>
                                 </div>
                             </div>

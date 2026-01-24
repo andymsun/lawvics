@@ -1,6 +1,18 @@
 import { z } from 'zod';
+import { generateObject } from 'ai';
+import { openai } from '@ai-sdk/openai';
 import { Statute } from '@/types/legal';
 import { Statute as StatuteV2 } from '@/types/statute';
+
+// ============================================================
+// Configuration
+// ============================================================
+
+/** Default mock mode setting (can be overridden by caller) */
+const DEFAULT_MOCK_MODE = true;
+
+/** OpenAI model for verification */
+const VERIFICATION_MODEL = 'gpt-4o-mini';
 
 // ============================================================
 // Verification Types
@@ -21,7 +33,36 @@ export interface VerificationResult {
     message: string;
     /** Timestamp of verification */
     verifiedAt: string;
+    /** LLM's reasoning for the confidence/trust level */
+    confidence_reasoning: string;
 }
+
+// ============================================================
+// LLM Verification Schema
+// ============================================================
+
+/**
+ * Schema for structured LLM verification output.
+ * The LLM must provide boolean checks and reasoning.
+ */
+const LLMVerificationSchema = z.object({
+    /** Does the statute text actually answer/support the user's original query? */
+    supports_query: z.boolean().describe('True if the text directly addresses the legal question asked'),
+
+    /** Is the citation format correct for this jurisdiction? */
+    citation_format_valid: z.boolean().describe('True if citation follows proper legal format for the state'),
+
+    /** Does this look like real legal statute text (not 404, ads, error pages)? */
+    looks_like_legal_text: z.boolean().describe('True if this appears to be genuine legal/statute text'),
+
+    /** Are there any indicators the statute has been repealed or superseded? */
+    is_potentially_repealed: z.boolean().describe('True if text mentions repealed, superseded, or future effective dates'),
+
+    /** Detailed reasoning explaining the verification decision */
+    confidence_reasoning: z.string().describe('1-2 sentences explaining why the text is trustworthy or suspicious'),
+});
+
+type LLMVerificationResult = z.infer<typeof LLMVerificationSchema>;
 
 // ============================================================
 // Verification Functions
@@ -40,34 +81,111 @@ function checkOfficialSource(url: string): boolean {
 }
 
 /**
- * Simulate hallucination/repeal detection (mocked for now)
- * In production, this would scrape the page and verify content
+ * Simulate verification for mock mode (no LLM call, saves tokens)
  */
-function simulateContentVerification(): { isRepealed: boolean; isHallucinated: boolean } {
-    // 10% chance of being flagged as repealed or hallucinated
+function simulateMockVerification(): LLMVerificationResult {
+    // 10% chance of being flagged as suspicious
     const random = Math.random();
+
     if (random < 0.05) {
-        return { isRepealed: true, isHallucinated: false };
+        return {
+            supports_query: true,
+            citation_format_valid: true,
+            looks_like_legal_text: true,
+            is_potentially_repealed: true,
+            confidence_reasoning: '[MOCK] Text contains repeal indicators - flagged for review.',
+        };
     } else if (random < 0.10) {
-        return { isRepealed: false, isHallucinated: true };
+        return {
+            supports_query: false,
+            citation_format_valid: true,
+            looks_like_legal_text: false,
+            is_potentially_repealed: false,
+            confidence_reasoning: '[MOCK] Text does not appear to be legal statute content.',
+        };
     }
-    return { isRepealed: false, isHallucinated: false };
+
+    return {
+        supports_query: true,
+        citation_format_valid: true,
+        looks_like_legal_text: true,
+        is_potentially_repealed: false,
+        confidence_reasoning: '[MOCK] Text appears to be legitimate legal content from verified source.',
+    };
 }
 
 /**
- * Determine trust level based on verification checks
+ * Verify statute text using LLM (Vercel AI SDK)
+ * 
+ * This is the "paranoid" verification - if anything is ambiguous,
+ * we flag it as suspicious rather than trusting it.
+ */
+async function verifyWithLLM(
+    textSnippet: string,
+    citation: string,
+    stateCode: string,
+    userQuery: string
+): Promise<LLMVerificationResult> {
+    const { object } = await generateObject({
+        model: openai(VERIFICATION_MODEL),
+        schema: LLMVerificationSchema,
+        prompt: `You are a paranoid legal verification assistant. Your job is to be SKEPTICAL and flag anything suspicious.
+
+CONTEXT:
+- User's original legal query: "${userQuery}"
+- State/Jurisdiction: ${stateCode}
+- Citation provided: "${citation}"
+
+TEXT TO VERIFY:
+"""
+${textSnippet}
+"""
+
+VERIFICATION RULES:
+1. supports_query: Only TRUE if the text DIRECTLY addresses the legal question. Tangential or vague references = FALSE.
+2. citation_format_valid: Check if "${citation}" follows proper Bluebook or state-specific citation format.
+3. looks_like_legal_text: FALSE if this looks like a 404 page, advertisement, navigation menu, or gibberish.
+4. is_potentially_repealed: TRUE if you see words like "repealed", "superseded", "effective [future date]", or amendments.
+
+BE PARANOID: When in doubt, flag as suspicious. False positives are better than missing bad data.
+
+Provide your verification results:`,
+    });
+
+    return object;
+}
+
+/**
+ * Determine trust level based on LLM verification checks
+ * 
+ * PARANOID LOGIC:
+ * - If any check fails → 'suspicious'
+ * - If not official source → 'unverified' 
+ * - Only if ALL checks pass AND official source → 'verified'
  */
 function determineTrustLevel(
-    isOfficialSource: boolean,
-    isRepealed: boolean,
-    isHallucinated: boolean
+    llmResult: LLMVerificationResult,
+    isOfficialSource: boolean
 ): TrustLevel {
-    if (isRepealed || isHallucinated) {
+    // Any failure = suspicious (paranoid approach)
+    if (llmResult.is_potentially_repealed) {
         return 'suspicious';
     }
+    if (!llmResult.looks_like_legal_text) {
+        return 'suspicious';
+    }
+    if (!llmResult.supports_query) {
+        return 'suspicious';
+    }
+    if (!llmResult.citation_format_valid) {
+        return 'suspicious';
+    }
+
+    // All checks passed, but source matters
     if (!isOfficialSource) {
         return 'unverified';
     }
+
     return 'verified';
 }
 
@@ -76,63 +194,102 @@ function determineTrustLevel(
  */
 function generateMessage(
     trustLevel: TrustLevel,
-    isOfficialSource: boolean,
-    isRepealed: boolean,
-    isHallucinated: boolean
+    llmResult: LLMVerificationResult,
+    isOfficialSource: boolean
 ): string {
-    if (isHallucinated) {
-        return 'Citation not found on source page - possible hallucination';
+    if (!llmResult.looks_like_legal_text) {
+        return 'Content does not appear to be legal statute text - possible hallucination or error page';
     }
-    if (isRepealed) {
-        return 'Statute appears to be repealed or superseded';
+    if (llmResult.is_potentially_repealed) {
+        return 'Statute may be repealed or superseded - requires manual verification';
+    }
+    if (!llmResult.supports_query) {
+        return 'Retrieved text does not directly address the legal query';
+    }
+    if (!llmResult.citation_format_valid) {
+        return 'Citation format appears incorrect for this jurisdiction';
     }
     if (!isOfficialSource) {
         return 'Source is not from an official .gov domain';
     }
-    return 'Verified from official government source';
+    return 'Verified: Text supports query from official government source';
 }
 
+// ============================================================
+// Main Verification Functions
+// ============================================================
+
 /**
- * Verify a statute citation and URL (NEW API for Statute V2)
+ * Verify a statute citation and URL
  * 
  * This function performs verification checks on a statute:
  * 1. Checks if URL is from .gov domain
- * 2. Simulates hallucination detection
- * 3. Simulates repeal detection
+ * 2. Uses LLM to verify content quality (or mocks if mockMode=true)
+ * 3. Determines trust level based on paranoid logic
  * 
  * @param citation - The legal citation string
  * @param url - The source URL
- * @returns VerificationResult with trust level and details
+ * @param textSnippet - The statute text content to verify
+ * @param stateCode - The 2-letter state code
+ * @param userQuery - The original user query (for relevance check)
+ * @param mockMode - If true, skip LLM call to save tokens (default: true)
+ * @returns VerificationResult with trust level and reasoning
  */
 export async function verifyStatuteCitation(
     citation: string,
-    url: string
+    url: string,
+    textSnippet: string = '',
+    stateCode: string = 'US',
+    userQuery: string = '',
+    mockMode: boolean = DEFAULT_MOCK_MODE
 ): Promise<VerificationResult> {
-    // Simulate network delay (100-300ms)
-    await new Promise((resolve) => setTimeout(resolve, Math.random() * 200 + 100));
-
     const isOfficialSource = checkOfficialSource(url);
-    const { isRepealed, isHallucinated } = simulateContentVerification();
-    const trustLevel = determineTrustLevel(isOfficialSource, isRepealed, isHallucinated);
-    const message = generateMessage(trustLevel, isOfficialSource, isRepealed, isHallucinated);
+
+    let llmResult: LLMVerificationResult;
+
+    if (mockMode) {
+        // Mock mode: Skip LLM to save tokens
+        await new Promise((resolve) => setTimeout(resolve, Math.random() * 200 + 100));
+        llmResult = simulateMockVerification();
+    } else {
+        // Real mode: Use LLM for verification
+        llmResult = await verifyWithLLM(textSnippet, citation, stateCode, userQuery);
+    }
+
+    const trustLevel = determineTrustLevel(llmResult, isOfficialSource);
+    const message = generateMessage(trustLevel, llmResult, isOfficialSource);
 
     return {
         trustLevel,
         isOfficialSource,
-        isRepealed,
-        isHallucinated,
+        isRepealed: llmResult.is_potentially_repealed,
+        isHallucinated: !llmResult.looks_like_legal_text || !llmResult.supports_query,
         message,
         verifiedAt: new Date().toISOString(),
+        confidence_reasoning: llmResult.confidence_reasoning,
     };
 }
 
 /**
  * Verify a Statute V2 object
+ * 
+ * @param statute - The statute to verify
+ * @param userQuery - The original user query
+ * @param mockMode - If true, skip LLM call
  */
 export async function verifyStatuteV2(
-    statute: StatuteV2
+    statute: StatuteV2,
+    userQuery: string = '',
+    mockMode: boolean = DEFAULT_MOCK_MODE
 ): Promise<VerificationResult> {
-    return verifyStatuteCitation(statute.citation, statute.sourceUrl);
+    return verifyStatuteCitation(
+        statute.citation,
+        statute.sourceUrl,
+        statute.textSnippet,
+        statute.stateCode,
+        userQuery,
+        mockMode
+    );
 }
 
 // ============================================================

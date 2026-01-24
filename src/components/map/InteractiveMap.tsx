@@ -1,55 +1,220 @@
 "use client";
 
-import React from "react";
+import React, { useState, useCallback, memo } from "react";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
-import { useLegalStore } from "@/lib/store";
+import { motion, AnimatePresence } from "framer-motion";
+import { X } from "lucide-react";
+import { useSurveyHistoryStore, useShallow, StatuteEntry, getActiveSessionStatutes } from "@/lib/store";
+import { getStateCodeFromGeo } from "@/lib/constants/stateMapping";
+import { StateCode, Statute } from "@/types/statute";
+import StatuteCard from "@/components/ui/StatuteCard";
 
 const geoUrl = "https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json";
 
-const InteractiveMap = () => {
-    const { results } = useLegalStore();
+// ============================================================
+// Color Logic
+// ============================================================
 
-    // Helper mappings and coloring functions removed for MVP cleanliness
-    // (We rely on direct property matching or default styling for now)
+type StateStatus = 'idle' | 'loading' | 'success' | 'suspicious' | 'error';
 
-    // Better approach: Let's iterate the store results and check status
+const STATUS_COLORS: Record<StateStatus, string> = {
+    idle: '#D6D6DA',      // Grey
+    loading: '#3B82F6',   // Blue
+    success: '#22C55E',   // Green
+    suspicious: '#EAB308', // Yellow
+    error: '#EF4444',     // Red
+};
+
+/**
+ * Determine the display status for a state based on its data
+ */
+function getStateStatus(entry: StatuteEntry | undefined): StateStatus {
+    if (!entry) return 'idle';
+
+    if (entry instanceof Error) return 'error';
+
+    // It's a Statute - check confidence for trust level approximation
+    // (Real trust level comes from verification, but we use confidence as proxy)
+    if (entry.confidenceScore < 70) return 'suspicious';
+
+    return 'success';
+}
+
+// ============================================================
+// Memoized State Path Component
+// ============================================================
+
+interface StatePathProps {
+    geo: any;
+    stateCode: StateCode | null;
+    status: StateStatus;
+    onClick: (stateCode: StateCode) => void;
+}
+
+const StatePath = memo(function StatePath({ geo, stateCode, status, onClick }: StatePathProps) {
+    const fill = STATUS_COLORS[status];
+    const isLoading = status === 'loading';
+
+    const handleClick = useCallback(() => {
+        if (stateCode && status !== 'idle' && status !== 'loading') {
+            onClick(stateCode);
+        }
+    }, [stateCode, status, onClick]);
 
     return (
-        <div className="w-full max-w-4xl mx-auto h-[500px] border rounded-xl overflow-hidden bg-slate-50 relative">
-            <ComposableMap projection="geoAlbersUsa">
+        <Geography
+            key={geo.rsmKey}
+            geography={geo}
+            fill={fill}
+            stroke="#FFF"
+            strokeWidth={0.5}
+            className={isLoading ? 'animate-pulse' : ''}
+            style={{
+                default: {
+                    outline: "none",
+                    cursor: status !== 'idle' && status !== 'loading' ? 'pointer' : 'default',
+                },
+                hover: {
+                    fill: status !== 'idle' ? '#94A3B8' : fill,
+                    outline: "none",
+                },
+                pressed: { outline: "none" },
+            }}
+            onClick={handleClick}
+        />
+    );
+});
+
+// ============================================================
+// Details Panel (Slide-over)
+// ============================================================
+
+interface DetailsPanelProps {
+    statute: Statute;
+    onClose: () => void;
+}
+
+function DetailsPanel({ statute, onClose }: DetailsPanelProps) {
+    return (
+        <motion.div
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            className="fixed right-0 top-0 h-full w-full max-w-md bg-background border-l border-border shadow-2xl z-50 overflow-auto"
+        >
+            {/* Close button */}
+            <button
+                onClick={onClose}
+                className="absolute top-4 right-4 p-2 rounded-lg hover:bg-muted transition-colors z-10"
+            >
+                <X className="w-5 h-5 text-muted-foreground" />
+            </button>
+
+            {/* Statute Card */}
+            <div className="p-6 pt-16">
+                <StatuteCard statute={statute} onClose={onClose} />
+            </div>
+        </motion.div>
+    );
+}
+
+// ============================================================
+// Legend Component
+// ============================================================
+
+function MapLegend() {
+    return (
+        <div className="absolute top-4 right-4 bg-card/95 backdrop-blur-sm p-4 rounded-xl shadow-lg border border-border text-xs">
+            <h3 className="font-bold mb-3 text-foreground">Status Legend</h3>
+            <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded" style={{ backgroundColor: STATUS_COLORS.idle }} />
+                    <span className="text-muted-foreground">No Data</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded animate-pulse" style={{ backgroundColor: STATUS_COLORS.loading }} />
+                    <span className="text-muted-foreground">Loading</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded" style={{ backgroundColor: STATUS_COLORS.success }} />
+                    <span className="text-muted-foreground">Verified</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded" style={{ backgroundColor: STATUS_COLORS.suspicious }} />
+                    <span className="text-muted-foreground">Suspicious</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded" style={{ backgroundColor: STATUS_COLORS.error }} />
+                    <span className="text-muted-foreground">Error</span>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ============================================================
+// Main Interactive Map Component
+// ============================================================
+
+const InteractiveMap = () => {
+    const [selectedStateCode, setSelectedStateCode] = useState<StateCode | null>(null);
+
+    // Use useShallow to prevent re-renders when unrelated store state changes
+    const activeStatutes = useSurveyHistoryStore(useShallow(getActiveSessionStatutes));
+    const activeSurveyId = useSurveyHistoryStore((state) => state.activeSurveyId);
+    const activeSurvey = useSurveyHistoryStore((state) =>
+        state.surveys.find(s => s.id === state.activeSurveyId)
+    );
+
+    // Determine if we're in a loading state (survey running)
+    const isLoading = activeSurvey?.status === 'running';
+
+    // Get the selected statute if available
+    const selectedStatute = selectedStateCode && activeStatutes[selectedStateCode];
+    const selectedStatuteData = selectedStatute instanceof Error ? null : selectedStatute;
+
+    const handleStateClick = useCallback((stateCode: StateCode) => {
+        setSelectedStateCode(stateCode);
+    }, []);
+
+    const handleClosePanel = useCallback(() => {
+        setSelectedStateCode(null);
+    }, []);
+
+    return (
+        <div className="w-full h-full min-h-[500px] relative bg-muted/30 rounded-xl overflow-hidden">
+            <ComposableMap
+                projection="geoAlbersUsa"
+                className="w-full h-full"
+            >
                 <Geographies geography={geoUrl}>
                     {({ geographies }: { geographies: any[] }) =>
                         geographies.map((geo: any) => {
-                            // Retrieve state status from store
-                            // This requires mapping the GeoJSON feature to our state code.
-                            // For MVP, checking if we can get the code from `id` (FIPS) or `properties.name`.
-                            // us-atlas states usually have `id` (FIPS code) and `properties.name`.
-                            // We need a FIPS -> Code mapper or Name -> Code mapper.
-                            // Let's rely on a simplified lookup for the MVP or just visualize "Loading" globally if hard.
+                            const stateCode = getStateCodeFromGeo(geo);
 
-                            // Actually, let's make it smarter.
-                            // We will simplify: If ANY state is loading, show loading overlay?
-                            // No, we want individual.
+                            // Determine status for this state
+                            let status: StateStatus = 'idle';
 
-                            // Let's use a quick Name -> Code map for the top 50.
-                            // Since I can't easily import a huge JSON right now, I'll rely on a direct check or
-                            // just styling based on "is it in the store?"
+                            if (stateCode) {
+                                const entry = activeStatutes[stateCode];
 
-                            // Temporary MVP Hack: Just color everything Blue if success, Red if error, Grey if idle.
-                            // We wont map 1:1 perfectly without the lookup table.
+                                if (entry) {
+                                    // We have data for this state
+                                    status = getStateStatus(entry);
+                                } else if (isLoading) {
+                                    // Survey is running but we don't have data yet
+                                    status = 'loading';
+                                }
+                            }
 
                             return (
-                                <Geography
+                                <StatePath
                                     key={geo.rsmKey}
-                                    geography={geo}
-                                    fill="#D6D6DA"
-                                    stroke="#FFF"
-                                    strokeWidth={1}
-                                    style={{
-                                        default: { outline: "none" },
-                                        hover: { fill: "#F53", outline: "none" },
-                                        pressed: { outline: "none" },
-                                    }}
+                                    geo={geo}
+                                    stateCode={stateCode}
+                                    status={status}
+                                    onClick={handleStateClick}
                                 />
                             );
                         })
@@ -57,14 +222,47 @@ const InteractiveMap = () => {
                 </Geographies>
             </ComposableMap>
 
-            {/* Legend / Status Overlay for MVP since Map mapping is complex without FIPS codes */}
-            <div className="absolute top-4 right-4 bg-white/90 p-4 rounded shadow-lg text-xs">
-                <h3 className="font-bold mb-2">Live Status</h3>
-                <div className="flex items-center gap-2"><div className="w-3 h-3 bg-gray-300 rounded"></div> Idle</div>
-                <div className="flex items-center gap-2"><div className="w-3 h-3 bg-blue-500 animate-pulse rounded"></div> Loading</div>
-                <div className="flex items-center gap-2"><div className="w-3 h-3 bg-green-500 rounded"></div> Success</div>
-                <div className="flex items-center gap-2"><div className="w-3 h-3 bg-red-500 rounded"></div> Error</div>
-            </div>
+            {/* Legend */}
+            <MapLegend />
+
+            {/* Active Survey Indicator */}
+            {activeSurvey && (
+                <div className="absolute bottom-4 left-4 bg-card/95 backdrop-blur-sm px-4 py-2 rounded-lg shadow-lg border border-border text-sm">
+                    <div className="flex items-center gap-2">
+                        {isLoading && (
+                            <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                        )}
+                        <span className="text-muted-foreground">
+                            Survey #{activeSurvey.id}: {isLoading ? 'Running...' : 'Complete'}
+                        </span>
+                        <span className="text-foreground font-medium">
+                            {Object.keys(activeStatutes).length}/50 states
+                        </span>
+                    </div>
+                </div>
+            )}
+
+            {/* Details Panel Slide-over */}
+            <AnimatePresence>
+                {selectedStatuteData && (
+                    <>
+                        {/* Backdrop */}
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 bg-black/20 z-40"
+                            onClick={handleClosePanel}
+                        />
+
+                        {/* Panel */}
+                        <DetailsPanel
+                            statute={selectedStatuteData}
+                            onClose={handleClosePanel}
+                        />
+                    </>
+                )}
+            </AnimatePresence>
         </div>
     );
 };
