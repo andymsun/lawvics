@@ -5,9 +5,110 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { generateObject } from 'ai';
 import { z } from 'zod';
 import * as cheerio from 'cheerio';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Force edge runtime for Cloudflare Pages
 export const runtime = 'edge';
+
+// ============================================================
+// Supabase Client (Lazy Init)
+// ============================================================
+
+let supabase: SupabaseClient | null = null;
+
+function getSupabaseClient(): SupabaseClient | null {
+    if (supabase) return supabase;
+
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!url || !key) {
+        console.warn('[Cache] Supabase credentials not configured, caching disabled');
+        return null;
+    }
+
+    supabase = createClient(url, key);
+    return supabase;
+}
+
+// ============================================================
+// Cache Helpers
+// ============================================================
+
+async function hashQuery(query: string): Promise<string> {
+    // Use Web Crypto API (Edge-compatible) for consistent hashing
+    const encoder = new TextEncoder();
+    const data = encoder.encode(query.toLowerCase().trim());
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+interface CachedStatute {
+    id: string;
+    state_code: string;
+    query_hash: string;
+    citation: string;
+    text_snippet: string | null;
+    effective_date: string | null;
+    confidence_score: number | null;
+    source_url: string | null;
+    updated_at: string;
+}
+
+async function getCachedStatute(stateCode: StateCode, queryHash: string): Promise<Statute | null> {
+    const client = getSupabaseClient();
+    if (!client) return null;
+
+    try {
+        const { data, error } = await client
+            .from('statutes')
+            .select('*')
+            .eq('state_code', stateCode)
+            .eq('query_hash', queryHash)
+            .single();
+
+        if (error || !data) return null;
+
+        const cached = data as CachedStatute;
+        console.log(`[Cache] HIT for ${stateCode}:${queryHash.slice(0, 8)}...`);
+
+        return {
+            stateCode: cached.state_code as StateCode,
+            citation: cached.citation,
+            textSnippet: cached.text_snippet || '',
+            effectiveDate: cached.effective_date || 'Unknown',
+            confidenceScore: cached.confidence_score || 0,
+            sourceUrl: cached.source_url || '',
+        };
+    } catch (err) {
+        console.error('[Cache] Read error:', err);
+        return null;
+    }
+}
+
+async function cacheStatuteAsync(statute: Statute, queryHash: string): Promise<void> {
+    const client = getSupabaseClient();
+    if (!client) return;
+
+    // Fire-and-forget: don't await, don't block response
+    client
+        .from('statutes')
+        .upsert({
+            state_code: statute.stateCode,
+            query_hash: queryHash,
+            citation: statute.citation,
+            text_snippet: statute.textSnippet,
+            effective_date: statute.effectiveDate,
+            confidence_score: statute.confidenceScore,
+            source_url: statute.sourceUrl,
+            updated_at: new Date().toISOString(),
+        }, { onConflict: 'state_code,query_hash' })
+        .then(({ error }) => {
+            if (error) console.error('[Cache] Write error:', error);
+            else console.log(`[Cache] STORED ${statute.stateCode}:${queryHash.slice(0, 8)}...`);
+        });
+}
 
 // ============================================================
 // Types
@@ -309,6 +410,23 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
         const activeProvider = request.headers.get('x-active-provider') as 'openai' | 'gemini' | null;
         const aiModel = request.headers.get('x-ai-model') || undefined;
 
+        // Generate query hash for cache lookups
+        const queryHash = await hashQuery(query);
+
+        // ============================================================
+        // STEP A: Check cache first (skip for mock mode)
+        // ============================================================
+        if (dataSource !== 'mock') {
+            const cachedResult = await getCachedStatute(stateCode, queryHash);
+            if (cachedResult) {
+                return NextResponse.json({ success: true, data: cachedResult });
+            }
+            console.log(`[Cache] MISS for ${stateCode}:${queryHash.slice(0, 8)}... proceeding to fetch`);
+        }
+
+        // ============================================================
+        // STEP B: Fetch from source (existing logic)
+        // ============================================================
         if (dataSource === 'mock') {
             // Simplified mock delay
             await new Promise(r => setTimeout(r, 800 + Math.random() * 1000));
@@ -359,6 +477,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
             throw new Error(`Unsupported data source: ${dataSource}`);
         }
 
+        // ============================================================
+        // STEP C: Cache result asynchronously (if confidence > 80)
+        // ============================================================
+        if (statute.confidenceScore && statute.confidenceScore > 80) {
+            // Fire-and-forget: don't await, don't block response
+            cacheStatuteAsync(statute, queryHash);
+        }
+
         return NextResponse.json({ success: true, data: statute });
     } catch (error) {
         console.error('Search error:', error);
@@ -368,4 +494,5 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
         );
     }
 }
+
 
