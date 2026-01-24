@@ -4,7 +4,13 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { generateObject } from 'ai';
 import { z } from 'zod';
-import * as cheerio from 'cheerio';
+// import * as cheerio from 'cheerio'; // Removed for Edge compatibility
+// ...
+// const html = await res.text();
+// const $ = cheerio.load(html);
+// $('script, style, nav, footer').remove();
+// const cleanText = $('body').text().replace(/\s+/g, ' ').substring(0, 15000);
+const cleanText = "Debug: Cheerio disabled"; // Placeholder
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Force edge runtime for Cloudflare Pages
@@ -313,11 +319,16 @@ async function scrapeStateStatute(
             }
 
             const html = await res.text();
-            const $ = cheerio.load(html);
-
-            // 2. Clean text (remove scripts, styles, etc.)
-            $('script, style, nav, footer').remove();
-            const cleanText = $('body').text().replace(/\s+/g, ' ').substring(0, 15000);
+            // 2. Clean text (remove scripts, styles, etc.) without Cheerio
+            const cleanText = html
+                .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "") // Remove scripts
+                .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gim, "")   // Remove styles
+                .replace(/<nav\b[^>]*>([\s\S]*?)<\/nav>/gim, "")       // Remove nav
+                .replace(/<footer\b[^>]*>([\s\S]*?)<\/footer>/gim, "") // Remove footer
+                .replace(/<[^>]+>/g, " ")                              // Remove all other tags
+                .replace(/\s+/g, ' ')                                  // Collapse whitespace
+                .trim()
+                .substring(0, 15000);
 
             // 3. LLM Extraction with specialized legal system prompt (with timeout)
             const model = getModel(keys, activeProvider, aiModel);
