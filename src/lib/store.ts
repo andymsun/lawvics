@@ -339,6 +339,10 @@ export interface SettingsState {
     geminiApiKey: string;
     /** User's Open States API key for official data */
     openStatesApiKey: string;
+    /** User's LegiScan API key for official data */
+    legiscanApiKey: string;
+    /** User's Scraping Service API key (e.g., ZenRows, ScrapingBee) */
+    scrapingApiKey: string;
     /** Enable simultaneous queries across all 50 jurisdictions */
     parallelFetch: boolean;
     /** Automatically run verification checks on returned statutes */
@@ -366,6 +370,12 @@ interface SettingsActions {
     setGeminiApiKey: (key: string) => void;
     /** Set the Open States API key */
     setOpenStatesApiKey: (key: string) => void;
+    /** Set the Open States API key */
+    setOpenStatesApiKey: (key: string) => void;
+    /** Set the LegiScan API key */
+    setLegiscanApiKey: (key: string) => void;
+    /** Set the Scraping Service API key */
+    setScrapingApiKey: (key: string) => void;
     /** Set the active AI provider */
     setActiveAiProvider: (provider: 'openai' | 'gemini') => void;
     /** Set the OpenAI model */
@@ -373,9 +383,9 @@ interface SettingsActions {
     /** Set the Gemini model */
     setGeminiModel: (model: string) => void;
     /** Update any boolean setting */
-    setSetting: <K extends keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openStatesApiKey' | 'themeColor' | 'openaiModel' | 'geminiModel' | 'activeAiProvider'>>(key: K, value: SettingsState[K]) => void;
+    setSetting: <K extends keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openStatesApiKey' | 'legiscanApiKey' | 'scrapingApiKey' | 'themeColor' | 'openaiModel' | 'geminiModel' | 'activeAiProvider'>>(key: K, value: SettingsState[K]) => void;
     /** Toggle a boolean setting */
-    toggleSetting: (key: keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openStatesApiKey' | 'themeColor' | 'openaiModel' | 'geminiModel' | 'activeAiProvider'>) => void;
+    toggleSetting: (key: keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openStatesApiKey' | 'legiscanApiKey' | 'scrapingApiKey' | 'themeColor' | 'openaiModel' | 'geminiModel' | 'activeAiProvider'>) => void;
     /** Set the theme color */
     setThemeColor: (color: ThemeColor) => void;
 }
@@ -387,6 +397,8 @@ const DEFAULT_SETTINGS: SettingsState = {
     openaiApiKey: '',
     geminiApiKey: '',
     openStatesApiKey: '',
+    legiscanApiKey: '',
+    scrapingApiKey: '',
     parallelFetch: true,
     autoVerify: true,
     showConfidence: true,
@@ -428,6 +440,8 @@ function persistSettings(settings: SettingsState): void {
             openaiApiKey: settings.openaiApiKey,
             geminiApiKey: settings.geminiApiKey,
             openStatesApiKey: settings.openStatesApiKey,
+            legiscanApiKey: settings.legiscanApiKey,
+            scrapingApiKey: settings.scrapingApiKey,
             parallelFetch: settings.parallelFetch,
             autoVerify: settings.autoVerify,
             showConfidence: settings.showConfidence,
@@ -463,6 +477,16 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
     setOpenStatesApiKey: (key) => {
         set({ openStatesApiKey: key });
+        persistSettings(get());
+    },
+
+    setLegiscanApiKey: (key) => {
+        set({ legiscanApiKey: key });
+        persistSettings(get());
+    },
+
+    setScrapingApiKey: (key) => {
+        set({ scrapingApiKey: key });
         persistSettings(get());
     },
 

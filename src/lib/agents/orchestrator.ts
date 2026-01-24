@@ -89,7 +89,7 @@ async function fetchStatuteFromApi(
     openaiApiKey: string = '' // Deprecated argument
 ): Promise<Statute> {
     const settings = useSettingsStore.getState();
-    const { dataSource, openaiApiKey: storeOpenAiKey, geminiApiKey, openStatesApiKey } = settings;
+    const { dataSource, openaiApiKey: storeOpenAiKey, geminiApiKey, openStatesApiKey, legiscanApiKey, scrapingApiKey } = settings;
 
     // 1. STRICT CLIENT-SIDE MOCK GUARD
     // If we are in mock mode, DO NOT attempt to hit the API at all.
@@ -109,8 +109,10 @@ async function fetchStatuteFromApi(
     if (dataSource === 'llm-scraper') {
         if (storeOpenAiKey) headers['x-openai-key'] = storeOpenAiKey;
         if (geminiApiKey) headers['x-gemini-key'] = geminiApiKey;
+        if (scrapingApiKey) headers['x-scraping-key'] = scrapingApiKey;
     } else if (dataSource === 'official-api') {
         if (openStatesApiKey) headers['x-openstates-key'] = openStatesApiKey;
+        if (legiscanApiKey) headers['x-legiscan-key'] = legiscanApiKey;
     }
 
     try {

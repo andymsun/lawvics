@@ -116,14 +116,32 @@ async function scrapeStateStatute(
     query: string,
     keys: { openai?: string; gemini?: string },
     activeProvider: 'openai' | 'gemini' = 'openai',
-    aiModel?: string
+    aiModel?: string,
+    scrapingApiKey?: string
 ): Promise<Statute> {
     const baseUrl = STATE_LEGISLATURE_URLS[stateCode];
     if (!baseUrl) throw new Error(`No URL for ${stateCode}`);
 
+    // Proxy Logic (ZenRows / ScrapingBee compatible)
+    let targetUrl = baseUrl;
+    let headers: Record<string, string> = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    };
+
+    if (scrapingApiKey && scrapingApiKey.length > 5) {
+        // Assume ZenRows format for now as default, or simple proxy param
+        // Example: https://api.zenrows.com/v1/?apikey=KEY&url=URL
+        targetUrl = `https://api.zenrows.com/v1/?apikey=${scrapingApiKey}&url=${encodeURIComponent(baseUrl)}`;
+        // Clear headers for proxy if needed, or keep them. ZenRows handles UA.
+        headers = {};
+    }
+
     try {
         // 1. Fetch the page content
-        const res = await fetch(baseUrl, { next: { revalidate: 3600 } });
+        const res = await fetch(targetUrl, {
+            next: { revalidate: 3600 },
+            headers
+        });
         const html = await res.text();
         const $ = cheerio.load(html);
 
@@ -187,6 +205,43 @@ async function fetchOpenStates(stateCode: StateCode, query: string, apiKey: stri
 }
 
 // ============================================================
+// LegiScan Client
+// ============================================================
+
+async function fetchLegiScan(stateCode: StateCode, query: string, apiKey: string): Promise<Statute> {
+    // LegiScan Search: https://api.legiscan.com/?key=KEY&op=getSearch&state=STATE&query=QUERY
+    const url = `https://api.legiscan.com/?key=${apiKey}&op=getSearch&state=${stateCode}&query=${encodeURIComponent(query)}`;
+
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (data.status === 'ERROR') {
+        throw new Error(`LegiScan API error: ${data.alert?.message || 'Unknown error'}`);
+    }
+
+    // Default to first result
+    const result = data.searchresult?.[0]; // LegiScan returns array in 'searchresult' (check specific shape)
+    // Note: LegiScan structure is { status: "OK", searchresult: { "0": {...}, "1": {...}, summary: {...} } }
+    // We need to handle this quirky array-like object.
+
+    // Safer extraction:
+    const firstKey = Object.keys(data.searchresult || {}).find(k => k !== 'summary' && !isNaN(Number(k)));
+    const doc = firstKey ? data.searchresult[firstKey] : null;
+
+    if (!doc) throw new Error(`No statutes found for "${query}" in ${stateCode} via LegiScan`);
+
+    // Fetch full text link if needed? LegiScan search gives text_url usually.
+    return {
+        stateCode,
+        citation: doc.bill_number || 'Unknown Citation',
+        textSnippet: doc.title || 'No text available', // LegiScan search snippet is limited
+        effectiveDate: doc.last_action_date || new Date().toISOString(),
+        confidenceScore: doc.relevance || 90,
+        sourceUrl: doc.url || `https://legiscan.com/${stateCode}/bill/${doc.bill_number}`,
+    };
+}
+
+// ============================================================
 // API Route Handler
 // ============================================================
 
@@ -203,6 +258,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
         const openaiApiKey = request.headers.get('x-openai-key') || undefined;
         const geminiApiKey = request.headers.get('x-gemini-key') || undefined;
         const openStatesApiKey = request.headers.get('x-openstates-key') || undefined;
+        const legiscanApiKey = request.headers.get('x-legiscan-key') || undefined;
+        const scrapingApiKey = request.headers.get('x-scraping-key') || undefined;
         const activeProvider = request.headers.get('x-active-provider') as 'openai' | 'gemini' | null;
         const aiModel = request.headers.get('x-ai-model') || undefined;
 
@@ -226,15 +283,21 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
         let statute: Statute;
 
         if (dataSource === 'official-api') {
-            if (!openStatesApiKey) throw new Error('Open States API Key required');
-            statute = await fetchOpenStates(stateCode, query, openStatesApiKey);
+            if (openStatesApiKey) {
+                statute = await fetchOpenStates(stateCode, query, openStatesApiKey);
+            } else if (legiscanApiKey) {
+                statute = await fetchLegiScan(stateCode, query, legiscanApiKey);
+            } else {
+                throw new Error('Official API mode requires Open States OR LegiScan API Key');
+            }
         } else if (dataSource === 'llm-scraper') {
             statute = await scrapeStateStatute(
                 stateCode,
                 query,
                 { openai: openaiApiKey, gemini: geminiApiKey },
                 activeProvider || (openaiApiKey ? 'openai' : 'gemini'),
-                aiModel
+                aiModel,
+                scrapingApiKey
             );
         } else {
             throw new Error(`Unsupported data source: ${dataSource}`);

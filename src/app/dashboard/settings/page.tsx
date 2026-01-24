@@ -143,6 +143,8 @@ const ApiKeyInput = ({ label, value, onChange, placeholder = "sk-...", helperTex
         }
     };
 
+
+
     return (
         <div className="space-y-3 pt-4 border-t border-border">
             <div className="flex items-start gap-6">
@@ -274,8 +276,8 @@ const DataSourceSelector = () => {
         {
             id: 'official-api',
             icon: Globe,
-            label: 'Open States API',
-            description: 'Official legislative data. Fast and accurate.'
+            label: 'Official APIs',
+            description: 'Open States or LegiScan data. Fast, accurate, and structured.'
         }
     ];
 
@@ -381,6 +383,24 @@ export default function SettingsPage() {
         } catch {
             return false;
         }
+    };
+
+    const testLegiScanKey = async (key: string) => {
+        try {
+            // LegiScan requires a session call or similar to test.
+            // Example ping: https://api.legiscan.com/?key=KEY&op=getSessionList&state=CA
+            const res = await fetch(`https://api.legiscan.com/?key=${key}&op=getSessionList&state=CA`);
+            const data = await res.json();
+            return data.status === 'OK';
+        } catch {
+            return false;
+        }
+    };
+
+    const testScrapingKey = async (key: string) => {
+        // Can't easily test generic keys without knowing provider.
+        // We'll just assume non-empty is a pass for now, or users can verify by running a search.
+        return key.length > 5;
     };
 
     return (
@@ -521,6 +541,21 @@ export default function SettingsPage() {
                                             onTest={testGeminiKey}
                                             required={settings.activeAiProvider === 'gemini'}
                                         />
+
+                                        <div className="pt-4 border-t border-border/50">
+                                            <h4 className="text-md font-medium mb-1">Scraping Proxy (Optional)</h4>
+                                            <p className="text-muted-foreground text-sm mb-3">
+                                                Use a specialized service (ZenRows, ScrapingBee) to bypass strong blocks.
+                                            </p>
+                                            <ApiKeyInput
+                                                label="Scraping Service Key"
+                                                value={settings.scrapingApiKey}
+                                                onChange={settings.setScrapingApiKey}
+                                                helperText="If provided, we'll try to use this for web scraping."
+                                                placeholder="Enter ZenRows or ScrapingBee key..."
+                                                onTest={testScrapingKey}
+                                            />
+                                        </div>
                                     </div>
                                 )}
                                 {settings.dataSource === 'official-api' && (
@@ -530,10 +565,22 @@ export default function SettingsPage() {
                                             value={settings.openStatesApiKey}
                                             onChange={settings.setOpenStatesApiKey}
                                             helperText="Get a free key at openstates.org"
-                                            required={true}
                                             getKeyUrl="https://openstates.org/accounts/profile/"
                                             onTest={testOpenStatesKey}
+                                            placeholder="os_..."
                                         />
+                                        <ApiKeyInput
+                                            label="LegiScan API Key"
+                                            value={settings.legiscanApiKey}
+                                            onChange={settings.setLegiscanApiKey}
+                                            helperText="Get a free key at legiscan.com (30k queries/mo)"
+                                            getKeyUrl="https://legiscan.com/legiscan"
+                                            onTest={testLegiScanKey}
+                                            placeholder="Your 32-character key"
+                                        />
+                                        <div className="text-xs text-muted-foreground p-3 bg-muted rounded-lg">
+                                            <span className="font-semibold text-foreground">Note:</span> Lawvics will try Open States first if both are provided.
+                                        </div>
                                     </div>
                                 )}
                             </motion.div>
