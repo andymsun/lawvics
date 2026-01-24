@@ -6,7 +6,7 @@ import { generateObject } from 'ai';
 import { z } from 'zod';
 
 // Force edge runtime for Cloudflare Pages
-export const runtime = 'edge';
+// export const runtime = 'edge'; // Removed to rely on nodejs_compat via next-on-pages
 
 // ============================================================
 // Debug Logger
