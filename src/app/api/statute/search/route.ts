@@ -300,6 +300,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
                 { openai: openaiApiKey, gemini: geminiApiKey },
                 activeProvider || (openaiApiKey ? 'openai' : 'gemini'),
                 aiModel,
+                undefined // No proxy for llm-scraper
+            );
+        } else if (dataSource === 'scraping-proxy') {
+            if (!scrapingApiKey) throw new Error('Scraping Proxy mode requires a ZenRows or ScrapingBee API Key');
+            statute = await scrapeStateStatute(
+                stateCode,
+                query,
+                { openai: openaiApiKey, gemini: geminiApiKey },
+                activeProvider || (openaiApiKey ? 'openai' : 'gemini'),
+                aiModel,
                 scrapingApiKey
             );
         } else {

@@ -327,7 +327,7 @@ export const useLegalStore = create<LegalStore & StoreActions>((set) => ({
 // Settings Store (useSettingsStore)
 // ============================================================
 
-export type DataSource = 'mock' | 'llm-scraper' | 'official-api';
+export type DataSource = 'mock' | 'llm-scraper' | 'official-api' | 'scraping-proxy';
 export type ThemeColor = 'blue' | 'violet' | 'green' | 'rose' | 'orange';
 
 export interface SettingsState {

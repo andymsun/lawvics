@@ -274,8 +274,14 @@ const DataSourceSelector = () => {
             description: 'Deep search using LLMs + Web Browsing. Slow but thorough.'
         },
         {
-            id: 'official-api',
+            id: 'scraping-proxy',
             icon: Globe,
+            label: 'Scraping Proxy',
+            description: 'Route through ZenRows/ScrapingBee to bypass blocks.'
+        },
+        {
+            id: 'official-api',
+            icon: Database,
             label: 'Official APIs',
             description: 'Open States or LegiScan data. Fast, accurate, and structured.'
         }
@@ -514,9 +520,12 @@ export default function SettingsPage() {
                                                     </>
                                                 ) : (
                                                     <>
+                                                        <option value="gemini-2.5-pro-preview-05-06">Gemini 2.5 Pro (Latest)</option>
+                                                        <option value="gemini-2.5-flash-preview-04-17">Gemini 2.5 Flash (Latest)</option>
+                                                        <option value="gemini-2.0-flash">Gemini 2.0 Flash (Fast)</option>
+                                                        <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite (Budget)</option>
                                                         <option value="gemini-1.5-pro">Gemini 1.5 Pro (High Context)</option>
-                                                        <option value="gemini-1.5-flash">Gemini 1.5 Flash (Ultra Fast)</option>
-                                                        <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (Next-Gen)</option>
+                                                        <option value="gemini-1.5-flash">Gemini 1.5 Flash (1M Tokens)</option>
                                                     </>
                                                 )}
                                             </select>
@@ -581,6 +590,40 @@ export default function SettingsPage() {
                                         <div className="text-xs text-muted-foreground p-3 bg-muted rounded-lg">
                                             <span className="font-semibold text-foreground">Note:</span> Lawvics will try Open States first if both are provided.
                                         </div>
+                                    </div>
+                                )}
+                                {settings.dataSource === 'scraping-proxy' && (
+                                    <div className="space-y-4 pt-4 border-t border-border animate-in fade-in slide-in-from-top-4">
+                                        <div className="text-sm text-muted-foreground p-3 bg-muted rounded-lg">
+                                            <span className="font-semibold text-foreground">How it works:</span> Requests are routed through a proxy (e.g., ZenRows) to bypass anti-bot detection. You also need an LLM key (OpenAI or Gemini) to parse the results.
+                                        </div>
+                                        <ApiKeyInput
+                                            label="Scraping Service Key"
+                                            value={settings.scrapingApiKey}
+                                            onChange={settings.setScrapingApiKey}
+                                            helperText="ZenRows, ScrapingBee, or similar"
+                                            placeholder="Enter your proxy API key..."
+                                            getKeyUrl="https://www.zenrows.com/"
+                                            onTest={testScrapingKey}
+                                            required={true}
+                                        />
+                                        <ApiKeyInput
+                                            label="OpenAI API Key (for parsing)"
+                                            value={settings.openaiApiKey}
+                                            onChange={settings.setOpenaiApiKey}
+                                            helperText="Used to extract statute from page content"
+                                            getKeyUrl="https://platform.openai.com/api-keys"
+                                            onTest={testOpenAIKey}
+                                        />
+                                        <ApiKeyInput
+                                            label="Gemini API Key (alternative)"
+                                            value={settings.geminiApiKey}
+                                            onChange={settings.setGeminiApiKey}
+                                            helperText="Use if you prefer Gemini for parsing"
+                                            placeholder="AIzp..."
+                                            getKeyUrl="https://aistudio.google.com/app/apikey"
+                                            onTest={testGeminiKey}
+                                        />
                                     </div>
                                 )}
                             </motion.div>

@@ -109,7 +109,10 @@ async function fetchStatuteFromApi(
     if (dataSource === 'llm-scraper') {
         if (storeOpenAiKey) headers['x-openai-key'] = storeOpenAiKey;
         if (geminiApiKey) headers['x-gemini-key'] = geminiApiKey;
+    } else if (dataSource === 'scraping-proxy') {
         if (scrapingApiKey) headers['x-scraping-key'] = scrapingApiKey;
+        if (storeOpenAiKey) headers['x-openai-key'] = storeOpenAiKey;
+        if (geminiApiKey) headers['x-gemini-key'] = geminiApiKey;
     } else if (dataSource === 'official-api') {
         if (openStatesApiKey) headers['x-openstates-key'] = openStatesApiKey;
         if (legiscanApiKey) headers['x-legiscan-key'] = legiscanApiKey;
