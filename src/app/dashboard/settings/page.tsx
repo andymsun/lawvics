@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTheme } from 'next-themes';
 import { motion, AnimatePresence } from 'framer-motion';
 import DashboardSidebar from '@/components/dashboard/DashboardSidebar';
@@ -179,14 +179,19 @@ function ThemeSelector() {
 // ============================================================
 
 export default function SettingsPage() {
+    const [mounted, setMounted] = useState(false);
     const { resolvedTheme, setTheme } = useTheme();
-    const clearSurveys = useSurveyHistoryStore((state) => {
-        // Create a custom clear function
-        return () => {
-            useSurveyHistoryStore.setState({ surveys: [], activeSurveyId: null });
-        };
-    });
     const clearNotifications = useNotificationStore((state) => state.clearNotifications);
+
+    // Prevent hydration mismatch
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    // Direct function to clear surveys - avoiding broken closure pattern
+    const clearSurveys = () => {
+        useSurveyHistoryStore.setState({ surveys: [], activeSurveyId: null });
+    };
 
     // Local settings state (would typically persist to localStorage or backend)
     const [settings, setSettings] = useState({
@@ -224,9 +229,9 @@ export default function SettingsPage() {
                         <button
                             onClick={toggleTheme}
                             className="p-2 rounded-lg hover:bg-muted transition-colors"
-                            title={resolvedTheme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                            title={mounted ? (resolvedTheme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode') : 'Toggle Theme'}
                         >
-                            {resolvedTheme === 'dark' ? (
+                            {mounted && resolvedTheme === 'dark' ? (
                                 <Sun className="w-5 h-5 text-yellow-400" />
                             ) : (
                                 <Moon className="w-5 h-5 text-muted-foreground hover:text-foreground" />

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { useStatuteStore, useSurveyHistoryStore } from '@/lib/store';
+import { useSurveyHistoryStore, useShallow, StatuteEntry } from '@/lib/store';
 import { US_STATES } from '@/lib/constants/states';
 import { StateCode } from '@/types/statute';
 import { BarChart3, TrendingUp, Clock, ShieldCheck, AlertCircle } from 'lucide-react';
@@ -40,7 +40,14 @@ function Bar({ label, value, max, color }: BarProps) {
 }
 
 export default function AnalyticsView() {
-    const statutes = useStatuteStore((state) => state.statutes);
+    // Get statutes from the ACTIVE SESSION (not global store)
+    const activeSession = useSurveyHistoryStore(
+        useShallow((state) => state.surveys.find((s) => s.id === state.activeSurveyId))
+    );
+    const statutes = useMemo<Partial<Record<StateCode, StatuteEntry>>>(() =>
+        activeSession?.statutes ?? {},
+        [activeSession?.statutes]
+    );
     const surveys = useSurveyHistoryStore((state) => state.surveys);
 
     // Calculate analytics

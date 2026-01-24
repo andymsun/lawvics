@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { useStatuteStore } from '@/lib/store';
+import { useSurveyHistoryStore, useShallow, StatuteEntry } from '@/lib/store';
 import { US_STATES } from '@/lib/constants/states';
 import { StateCode } from '@/types/statute';
 import { ShieldCheck, AlertCircle, Clock } from 'lucide-react';
@@ -27,7 +27,14 @@ function StatusCell({ status }: { status: Status }) {
 }
 
 export default function MatrixView() {
-    const statutes = useStatuteStore((state) => state.statutes);
+    // Get statutes from the ACTIVE SESSION (not global store)
+    const activeSession = useSurveyHistoryStore(
+        useShallow((state) => state.surveys.find((s) => s.id === state.activeSurveyId))
+    );
+    const statutes = useMemo<Partial<Record<StateCode, StatuteEntry>>>(() =>
+        activeSession?.statutes ?? {},
+        [activeSession?.statutes]
+    );
 
     // Build matrix data
     const matrixData = useMemo(() => {

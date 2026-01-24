@@ -1,10 +1,12 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useTheme } from 'next-themes';
 import DashboardSidebar from '@/components/dashboard/DashboardSidebar';
 import { useSurveyHistoryStore, SurveyRecord } from '@/lib/store';
 import { Settings, Sun, Moon, FileText, Clock, CheckCircle, XCircle, Eye, Trash2 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
 function formatDate(timestamp: number): string {
@@ -27,8 +29,13 @@ function formatDuration(start: number, end?: number): string {
 }
 
 export default function HistoryPage() {
+    const [mounted, setMounted] = useState(false);
     const { resolvedTheme, setTheme } = useTheme();
     const surveys = useSurveyHistoryStore((state) => state.surveys);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     const toggleTheme = () => {
         setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
@@ -53,9 +60,9 @@ export default function HistoryPage() {
                         <button
                             onClick={toggleTheme}
                             className="p-2 rounded-lg hover:bg-muted transition-colors"
-                            title={resolvedTheme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                            title={mounted ? (resolvedTheme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode') : 'Toggle Theme'}
                         >
-                            {resolvedTheme === 'dark' ? (
+                            {mounted && resolvedTheme === 'dark' ? (
                                 <Sun className="w-5 h-5 text-yellow-400" />
                             ) : (
                                 <Moon className="w-5 h-5 text-muted-foreground hover:text-foreground" />
@@ -155,6 +162,8 @@ export default function HistoryPage() {
 }
 
 function SurveyRow({ survey }: { survey: SurveyRecord }) {
+    const router = useRouter();
+    const setActiveSurvey = useSurveyHistoryStore((state) => state.setActiveSurvey);
     const statesAnalyzed = survey.successCount + survey.errorCount;
     const hasRisk = survey.errorCount > 0;
     const statusColor = {
@@ -162,6 +171,11 @@ function SurveyRow({ survey }: { survey: SurveyRecord }) {
         completed: 'text-green-500',
         failed: 'text-red-500',
     }[survey.status];
+
+    const handleViewResults = () => {
+        setActiveSurvey(survey.id);
+        router.push('/dashboard');
+    };
 
     return (
         <tr className="hover:bg-muted/50 transition-colors">
@@ -219,13 +233,13 @@ function SurveyRow({ survey }: { survey: SurveyRecord }) {
 
             {/* Action */}
             <td className="px-4 py-4 text-right">
-                <Link
-                    href="/dashboard"
+                <button
+                    onClick={handleViewResults}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
                 >
                     <Eye className="w-3.5 h-3.5" />
                     View Results
-                </Link>
+                </button>
             </td>
         </tr>
     );

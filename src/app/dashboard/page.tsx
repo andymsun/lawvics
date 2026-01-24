@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useTheme } from 'next-themes';
 import USMap from '@/components/map/USMap';
 import SearchPanel from '@/components/ui/SearchPanel';
@@ -25,7 +25,13 @@ export default function Dashboard() {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isReportOpen, setIsReportOpen] = useState(false);
     const [activeView, setActiveView] = useState<ViewType>('geospatial');
+    const [mounted, setMounted] = useState(false);
     const { theme, setTheme, resolvedTheme } = useTheme();
+
+    // Prevent hydration mismatch by waiting for mount
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     // Get statutes from the ACTIVE SESSION (not global store)
     const activeSession = useSurveyHistoryStore(
@@ -106,9 +112,9 @@ export default function Dashboard() {
                         <button
                             onClick={toggleTheme}
                             className="p-2 rounded-lg hover:bg-muted transition-colors"
-                            title={resolvedTheme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                            title={mounted ? (resolvedTheme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode') : 'Toggle Theme'}
                         >
-                            {resolvedTheme === 'dark' ? (
+                            {mounted && resolvedTheme === 'dark' ? (
                                 <Sun className="w-5 h-5 text-yellow-400" />
                             ) : (
                                 <Moon className="w-5 h-5 text-muted-foreground hover:text-foreground" />
