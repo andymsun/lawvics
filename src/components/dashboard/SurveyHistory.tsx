@@ -1,0 +1,114 @@
+'use client';
+
+import { useSurveyHistoryStore, SurveyRecord, useShallow } from '@/lib/store';
+import { cn } from '@/lib/utils';
+import { Clock, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+
+function formatTime(timestamp: number): string {
+    const now = Date.now();
+    const diff = now - timestamp;
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+
+    if (minutes < 1) return 'Just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    return `${days}d ago`;
+}
+
+function StatusBadge({ status, progress }: { status: SurveyRecord['status']; progress?: number }) {
+    switch (status) {
+        case 'running':
+            return (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Running{progress !== undefined ? ` (${progress}%)` : ''}
+                </span>
+            );
+        case 'completed':
+            return (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                    <CheckCircle className="w-3 h-3" />
+                    Completed
+                </span>
+            );
+        case 'failed':
+            return (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                    <AlertCircle className="w-3 h-3" />
+                    Failed
+                </span>
+            );
+        case 'cancelled':
+            return (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-400">
+                    <Clock className="w-3 h-3" />
+                    Cancelled
+                </span>
+            );
+    }
+}
+
+export function SurveyHistory() {
+    // Use useShallow for array selection to prevent infinite re-renders
+    const surveys = useSurveyHistoryStore(useShallow((state) => state.surveys));
+    const activeSurveyId = useSurveyHistoryStore((state) => state.activeSurveyId);
+    const setActiveSurvey = useSurveyHistoryStore((state) => state.setActiveSurvey);
+
+    if (surveys.length === 0) {
+        return (
+            <div className="p-6 text-center text-muted-foreground">
+                <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">No surveys yet</p>
+                <p className="text-xs mt-1">Run a search to get started</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-2">
+            {surveys.map((survey) => (
+                <button
+                    key={survey.id}
+                    onClick={() => setActiveSurvey(survey.id)}
+                    className={cn(
+                        'w-full text-left p-3 rounded-lg border transition-colors',
+                        activeSurveyId === survey.id
+                            ? 'bg-primary/5 border-primary/30'
+                            : 'bg-card border-border hover:bg-muted'
+                    )}
+                >
+                    <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-mono text-muted-foreground">
+                                    #{survey.id}
+                                </span>
+                                <StatusBadge
+                                    status={survey.status}
+                                    progress={survey.status === 'running' ? Math.round((Object.keys(survey.statutes || {}).length / 50) * 100) : undefined}
+                                />
+                            </div>
+                            <p className="mt-1 text-sm font-medium truncate">
+                                {survey.query}
+                            </p>
+                            <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+                                <span>{formatTime(survey.startedAt)}</span>
+                                {survey.status !== 'running' && (
+                                    <>
+                                        <span>•</span>
+                                        <span className="text-green-500">{survey.successCount} success</span>
+                                        <span className="text-red-500">{survey.errorCount} errors</span>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </button>
+            ))}
+        </div>
+    );
+}
+
+export default SurveyHistory;
