@@ -6,6 +6,9 @@ import { generateObject } from 'ai';
 import { z } from 'zod';
 import * as cheerio from 'cheerio';
 
+// Force edge runtime for Cloudflare Pages
+export const runtime = 'edge';
+
 // ============================================================
 // Types
 // ============================================================
