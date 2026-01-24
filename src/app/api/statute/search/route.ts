@@ -174,17 +174,30 @@ async function scrapeStateStatute(
             $('script, style, nav, footer').remove();
             const cleanText = $('body').text().replace(/\s+/g, ' ').substring(0, 15000);
 
-            // 3. LLM Extraction
+            // 3. LLM Extraction with specialized legal system prompt
             const model = getModel(keys, activeProvider, aiModel);
             const { object } = await generateObject({
                 model,
                 schema: ScraperSchema,
-                prompt: `Extract statute information for the query "${query}" from the following text from ${stateCode}'s legislature website:
-            
-            TEXT:
-            "${cleanText}"
-            
-            If no specific statute is found, return the best match or state "None found" in citation.`,
+                system: `You are a legal research assistant specializing in US state statutory law. Your task is to extract precise statute citations and text from state legislature websites.
+
+RULES:
+1. Always provide the EXACT citation format used by the state (e.g., "Cal. Civ. Code § 335.1" or "N.Y. Gen. Bus. Law § 349").
+2. For limitation periods, extract the EXACT number of years/days and the trigger event (e.g., "from date of discovery").
+3. If multiple statutes are relevant, choose the one most directly answering the query.
+4. If the text discusses a statute but doesn't cite it, mark confidence as LOW (below 60).
+5. Always include the effective date if mentioned in the text.
+6. Do NOT hallucinate citations. If unsure, use "None found" and set confidence to 0.
+7. The textSnippet should be the actual statute text, not a summary.
+
+PRIORITY: Accuracy over completeness. A "None found" with 0 confidence is better than a hallucinated citation.`,
+                prompt: `Extract the statute that answers the query "${query}" from this ${stateCode} legislature webpage content:
+
+---
+${cleanText}
+---
+
+If you find a specific statute section number and text, extract it. If the page is a search results page or index, report "None found".`,
             });
 
             return {
