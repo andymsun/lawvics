@@ -1,0 +1,302 @@
+import { create } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
+import { LegalStore, StateResult, Statute } from '@/types/legal';
+import { StateCode, Statute as StatuteType } from '@/types/statute';
+import type { ReactNode } from 'react';
+
+// Re-export useShallow for consumers
+export { useShallow };
+
+// ============================================================
+// Statute Store (useStatuteStore)
+// ============================================================
+
+/** Entry in the statute store: either a valid Statute or an Error */
+export type StatuteEntry = StatuteType | Error;
+
+/** All 50 US State Codes */
+export const ALL_STATE_CODES: readonly StateCode[] = [
+    'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+    'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+    'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+    'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
+    'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
+] as const;
+
+const TOTAL_STATES = 50;
+
+interface StatuteStoreState {
+    /** Map of StateCode to Statute or Error */
+    statutes: Partial<Record<StateCode, StatuteEntry>>;
+}
+
+interface StatuteStoreActions {
+    /** Set a successful statute result for a state */
+    setStatute: (state: StateCode, data: StatuteType) => void;
+    /** Set an error result for a state */
+    setError: (state: StateCode, error: Error) => void;
+    /** Reset all state data */
+    resetAll: () => void;
+}
+
+export type StatuteStore = StatuteStoreState & StatuteStoreActions;
+
+export const useStatuteStore = create<StatuteStore>((set) => ({
+    statutes: {},
+
+    setStatute: (stateCode, data) =>
+        set((state) => ({
+            statutes: { ...state.statutes, [stateCode]: data }
+        })),
+
+    setError: (stateCode, error) =>
+        set((state) => ({
+            statutes: { ...state.statutes, [stateCode]: error }
+        })),
+
+    resetAll: () => set({ statutes: {} })
+}));
+
+/** Selector: Get the percentage of states that have returned data (0-100) */
+export const getPercentComplete = (state: StatuteStore): number => {
+    const count = Object.keys(state.statutes).length;
+    return Math.round((count / TOTAL_STATES) * 100);
+};
+
+// ============================================================
+// Notification Store (useNotificationStore)
+// ============================================================
+
+export interface Activity {
+    id: number;
+    icon: 'survey' | 'error' | 'success' | 'info';
+    title: string;
+    description: string;
+    time: string;
+    timestamp: number;
+}
+
+interface NotificationStoreState {
+    notifications: Activity[];
+}
+
+interface NotificationStoreActions {
+    addNotification: (notification: Omit<Activity, 'id' | 'timestamp'>) => void;
+    clearNotifications: () => void;
+    removeNotification: (id: number) => void;
+}
+
+export type NotificationStore = NotificationStoreState & NotificationStoreActions;
+
+let notificationId = 0;
+
+export const useNotificationStore = create<NotificationStore>((set) => ({
+    notifications: [],
+
+    addNotification: (notification) =>
+        set((state) => ({
+            notifications: [
+                {
+                    ...notification,
+                    id: ++notificationId,
+                    timestamp: Date.now(),
+                },
+                ...state.notifications,
+            ].slice(0, 20), // Keep max 20 notifications
+        })),
+
+    clearNotifications: () => set({ notifications: [] }),
+
+    removeNotification: (id) =>
+        set((state) => ({
+            notifications: state.notifications.filter((n) => n.id !== id),
+        })),
+}));
+
+// ============================================================
+// Survey History Store (useSurveyHistoryStore)
+// ============================================================
+
+/** Maximum concurrent surveys allowed */
+export const MAX_CONCURRENT_SURVEYS = 5;
+
+export interface SurveyRecord {
+    id: number;
+    query: string;
+    startedAt: number;
+    completedAt?: number;
+    successCount: number;
+    errorCount: number;
+    status: 'running' | 'completed' | 'failed';
+    /** Per-session statute data - each survey owns its results */
+    statutes: Partial<Record<StateCode, StatuteEntry>>;
+}
+
+interface SurveyHistoryState {
+    surveys: SurveyRecord[];
+    activeSurveyId: number | null;
+}
+
+interface SurveyHistoryActions {
+    startSurvey: (query: string) => number;
+    updateSurvey: (id: number, update: Partial<SurveyRecord>) => void;
+    completeSurvey: (id: number, successCount: number, errorCount: number) => void;
+    setActiveSurvey: (id: number | null) => void;
+    /** Set a statute result for a specific session */
+    setSessionStatute: (surveyId: number, stateCode: StateCode, data: StatuteType) => void;
+    /** Set an error for a specific session */
+    setSessionError: (surveyId: number, stateCode: StateCode, error: Error) => void;
+}
+
+export type SurveyHistoryStore = SurveyHistoryState & SurveyHistoryActions;
+
+let surveyId = 100; // Start from 100 for "Survey #101" etc.
+
+export const useSurveyHistoryStore = create<SurveyHistoryStore>((set, get) => ({
+    surveys: [],
+    activeSurveyId: null,
+
+    startSurvey: (query) => {
+        const id = ++surveyId;
+        const survey: SurveyRecord = {
+            id,
+            query,
+            startedAt: Date.now(),
+            successCount: 0,
+            errorCount: 0,
+            status: 'running',
+            statutes: {}, // Initialize empty statutes map
+        };
+        set((state) => ({
+            surveys: [survey, ...state.surveys].slice(0, 50), // Keep max 50
+            activeSurveyId: id,
+        }));
+        return id;
+    },
+
+    updateSurvey: (id, update) =>
+        set((state) => ({
+            surveys: state.surveys.map((s) =>
+                s.id === id ? { ...s, ...update } : s
+            ),
+        })),
+
+    completeSurvey: (id, successCount, errorCount) => {
+        set((state) => ({
+            surveys: state.surveys.map((s) =>
+                s.id === id
+                    ? {
+                        ...s,
+                        completedAt: Date.now(),
+                        successCount,
+                        errorCount,
+                        status: errorCount > successCount ? 'failed' : 'completed',
+                    }
+                    : s
+            ),
+        }));
+
+        // Add notification
+        const survey = get().surveys.find((s) => s.id === id);
+        if (survey) {
+            useNotificationStore.getState().addNotification({
+                icon: errorCount > successCount ? 'error' : 'success',
+                title: `Survey #${id} Completed`,
+                description: `${successCount} states verified, ${errorCount} errors`,
+                time: 'Just now',
+            });
+        }
+    },
+
+    setActiveSurvey: (id) => set({ activeSurveyId: id }),
+
+    setSessionStatute: (surveyId, stateCode, data) =>
+        set((state) => ({
+            surveys: state.surveys.map((s) =>
+                s.id === surveyId
+                    ? { ...s, statutes: { ...s.statutes, [stateCode]: data } }
+                    : s
+            ),
+        })),
+
+    setSessionError: (surveyId, stateCode, error) =>
+        set((state) => ({
+            surveys: state.surveys.map((s) =>
+                s.id === surveyId
+                    ? { ...s, statutes: { ...s.statutes, [stateCode]: error } }
+                    : s
+            ),
+        })),
+}));
+
+/** Selector: Count of currently running surveys */
+export const getRunningCount = (state: SurveyHistoryStore): number =>
+    state.surveys.filter((s) => s.status === 'running').length;
+
+/** Selector: Get statutes for the active session */
+export const getActiveSessionStatutes = (state: SurveyHistoryStore): Partial<Record<StateCode, StatuteEntry>> => {
+    const activeSurvey = state.surveys.find((s) => s.id === state.activeSurveyId);
+    return activeSurvey?.statutes ?? {};
+};
+
+/** Selector: Get progress percentage for a specific session */
+export const getSessionPercentComplete = (state: SurveyHistoryStore, surveyId: number): number => {
+    const survey = state.surveys.find((s) => s.id === surveyId);
+    if (!survey) return 0;
+    const count = Object.keys(survey.statutes).length;
+    return Math.round((count / 50) * 100);
+};
+
+// ============================================================
+// Legacy Legal Store (useLegalStore)
+// ============================================================
+
+interface StoreActions {
+    setLoading: (jurisdiction: string) => void;
+    setSuccess: (jurisdiction: string, data: Statute) => void;
+    setError: (jurisdiction: string, error: string) => void;
+    reset: () => void;
+}
+
+const initialState: Record<string, StateResult> = {};
+
+// Initialize all 50 states to IDLE
+const US_STATES_LEGACY = [
+    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
+    "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
+    "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
+    "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
+    "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"
+];
+
+US_STATES_LEGACY.forEach(code => {
+    initialState[code] = { status: 'idle', data: null, error: null };
+});
+
+export const useLegalStore = create<LegalStore & StoreActions>((set) => ({
+    results: initialState,
+
+    setLoading: (jurisdiction) => set((state) => ({
+        results: {
+            ...state.results,
+            [jurisdiction]: { status: 'loading', data: null, error: null }
+        }
+    })),
+
+    setSuccess: (jurisdiction, data) => set((state) => ({
+        results: {
+            ...state.results,
+            [jurisdiction]: { status: 'success', data, error: null }
+        }
+    })),
+
+    setError: (jurisdiction, error) => set((state) => ({
+        results: {
+            ...state.results,
+            [jurisdiction]: { status: 'error', data: null, error }
+        }
+    })),
+
+    reset: () => set({ results: initialState })
+}));
+
