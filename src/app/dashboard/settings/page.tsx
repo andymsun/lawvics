@@ -143,6 +143,8 @@ const ApiKeyInput = ({ label, value, onChange, placeholder = "sk-...", helperTex
         }
     };
 
+
+
     return (
         <div className="space-y-3 pt-4 border-t border-border">
             <div className="flex items-start gap-6">
@@ -272,10 +274,16 @@ const DataSourceSelector = () => {
             description: 'Deep search using LLMs + Web Browsing. Slow but thorough.'
         },
         {
-            id: 'official-api',
+            id: 'scraping-proxy',
             icon: Globe,
-            label: 'Open States API',
-            description: 'Official legislative data. Fast and accurate.'
+            label: 'Scraping Proxy',
+            description: 'Route through ZenRows/ScrapingBee to bypass blocks.'
+        },
+        {
+            id: 'official-api',
+            icon: Database,
+            label: 'Official APIs',
+            description: 'Open States or LegiScan data. Fast, accurate, and structured.'
         }
     ];
 
@@ -383,6 +391,35 @@ export default function SettingsPage() {
         }
     };
 
+    const testLegiScanKey = async (key: string) => {
+        try {
+            // LegiScan requires a session call or similar to test.
+            // Example ping: https://api.legiscan.com/?key=KEY&op=getSessionList&state=CA
+            const res = await fetch(`https://api.legiscan.com/?key=${key}&op=getSessionList&state=CA`);
+            const data = await res.json();
+            return data.status === 'OK';
+        } catch {
+            return false;
+        }
+    };
+
+    const testScrapingKey = async (key: string) => {
+        // Can't easily test generic keys without knowing provider.
+        // We'll just assume non-empty is a pass for now, or users can verify by running a search.
+        return key.length > 5;
+    };
+
+    const testOpenRouterKey = async (key: string) => {
+        try {
+            const res = await fetch('https://openrouter.ai/api/v1/models', {
+                headers: { Authorization: `Bearer ${key}` }
+            });
+            return res.ok;
+        } catch {
+            return false;
+        }
+    };
+
     return (
         <div className="h-full flex flex-col p-6 space-y-6">
             {/* Header */}
@@ -470,18 +507,37 @@ export default function SettingsPage() {
                                             >
                                                 Gemini
                                             </button>
+                                            <button
+                                                onClick={() => settings.setActiveAiProvider('openrouter')}
+                                                className={cn(
+                                                    "px-4 py-1.5 rounded-md text-sm font-medium transition-all",
+                                                    settings.activeAiProvider === 'openrouter'
+                                                        ? "bg-background text-foreground shadow-sm"
+                                                        : "text-muted-foreground hover:text-foreground"
+                                                )}
+                                            >
+                                                OpenRouter
+                                            </button>
                                         </div>
 
                                         {/* Model Dropdown based on Provider */}
                                         <div className="space-y-3">
                                             <label className="text-sm font-medium">Model Selection</label>
                                             <select
-                                                value={settings.activeAiProvider === 'openai' ? settings.openaiModel : settings.geminiModel}
+                                                value={
+                                                    settings.activeAiProvider === 'openai'
+                                                        ? settings.openaiModel
+                                                        : settings.activeAiProvider === 'gemini'
+                                                            ? settings.geminiModel
+                                                            : settings.openRouterModel
+                                                }
                                                 onChange={(e) => {
                                                     if (settings.activeAiProvider === 'openai') {
                                                         settings.setOpenaiModel(e.target.value);
-                                                    } else {
+                                                    } else if (settings.activeAiProvider === 'gemini') {
                                                         settings.setGeminiModel(e.target.value);
+                                                    } else {
+                                                        settings.setOpenRouterModel(e.target.value);
                                                     }
                                                 }}
                                                 className="w-full max-w-xs px-3 py-2 bg-muted border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
@@ -492,14 +548,32 @@ export default function SettingsPage() {
                                                         <option value="gpt-4o-mini">GPT-4o-mini (Cost-Efficient)</option>
                                                         <option value="o1-mini">o1-mini (Reasoning)</option>
                                                     </>
+                                                ) : settings.activeAiProvider === 'gemini' ? (
+                                                    <>
+                                                        <option value="gemini-2.5-pro-preview-05-06">Gemini 2.5 Pro (Latest)</option>
+                                                        <option value="gemini-2.5-flash-preview-04-17">Gemini 2.5 Flash (Latest)</option>
+                                                        <option value="gemini-2.0-flash">Gemini 2.0 Flash (Fast)</option>
+                                                        <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite (Budget)</option>
+                                                        <option value="gemini-1.5-pro">Gemini 1.5 Pro (High Context)</option>
+                                                        <option value="gemini-1.5-flash">Gemini 1.5 Flash (1M Tokens)</option>
+                                                    </>
                                                 ) : (
                                                     <>
-                                                        <option value="gemini-1.5-pro">Gemini 1.5 Pro (High Context)</option>
-                                                        <option value="gemini-1.5-flash">Gemini 1.5 Flash (Ultra Fast)</option>
-                                                        <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (Next-Gen)</option>
+                                                        <option value="openai/gpt-4o-mini">OpenAI GPT-4o-mini (Budget)</option>
+                                                        <option value="openai/gpt-4o">OpenAI GPT-4o (Premium)</option>
+                                                        <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+                                                        <option value="anthropic/claude-3-haiku">Claude 3 Haiku (Fast)</option>
+                                                        <option value="google/gemini-pro-1.5">Gemini Pro 1.5</option>
+                                                        <option value="meta-llama/llama-3.1-70b-instruct">Llama 3.1 70B</option>
+                                                        <option value="mistralai/mistral-large">Mistral Large</option>
                                                     </>
                                                 )}
                                             </select>
+                                            {settings.activeAiProvider === 'openrouter' && (
+                                                <p className="text-xs text-muted-foreground">
+                                                    Or enter any model ID from <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">openrouter.ai/models</a>
+                                                </p>
+                                            )}
                                         </div>
 
                                         <ApiKeyInput
@@ -521,6 +595,31 @@ export default function SettingsPage() {
                                             onTest={testGeminiKey}
                                             required={settings.activeAiProvider === 'gemini'}
                                         />
+                                        <ApiKeyInput
+                                            label="OpenRouter API Key"
+                                            value={settings.openRouterApiKey}
+                                            onChange={settings.setOpenRouterApiKey}
+                                            helperText="Access 200+ models via one API. Great for Claude, Llama, Mistral, etc."
+                                            placeholder="sk-or-v1-..."
+                                            getKeyUrl="https://openrouter.ai/keys"
+                                            onTest={testOpenRouterKey}
+                                            required={settings.activeAiProvider === 'openrouter'}
+                                        />
+
+                                        <div className="pt-4 border-t border-border/50">
+                                            <h4 className="text-md font-medium mb-1">Scraping Proxy (Optional)</h4>
+                                            <p className="text-muted-foreground text-sm mb-3">
+                                                Use a specialized service (ZenRows, ScrapingBee) to bypass strong blocks.
+                                            </p>
+                                            <ApiKeyInput
+                                                label="Scraping Service Key"
+                                                value={settings.scrapingApiKey}
+                                                onChange={settings.setScrapingApiKey}
+                                                helperText="If provided, we'll try to use this for web scraping."
+                                                placeholder="Enter ZenRows or ScrapingBee key..."
+                                                onTest={testScrapingKey}
+                                            />
+                                        </div>
                                     </div>
                                 )}
                                 {settings.dataSource === 'official-api' && (
@@ -530,9 +629,55 @@ export default function SettingsPage() {
                                             value={settings.openStatesApiKey}
                                             onChange={settings.setOpenStatesApiKey}
                                             helperText="Get a free key at openstates.org"
-                                            required={true}
                                             getKeyUrl="https://openstates.org/accounts/profile/"
                                             onTest={testOpenStatesKey}
+                                            placeholder="os_..."
+                                        />
+                                        <ApiKeyInput
+                                            label="LegiScan API Key"
+                                            value={settings.legiscanApiKey}
+                                            onChange={settings.setLegiscanApiKey}
+                                            helperText="Get a free key at legiscan.com (30k queries/mo)"
+                                            getKeyUrl="https://legiscan.com/legiscan"
+                                            onTest={testLegiScanKey}
+                                            placeholder="Your 32-character key"
+                                        />
+                                        <div className="text-xs text-muted-foreground p-3 bg-muted rounded-lg">
+                                            <span className="font-semibold text-foreground">Note:</span> Lawvics will try Open States first if both are provided.
+                                        </div>
+                                    </div>
+                                )}
+                                {settings.dataSource === 'scraping-proxy' && (
+                                    <div className="space-y-4 pt-4 border-t border-border animate-in fade-in slide-in-from-top-4">
+                                        <div className="text-sm text-muted-foreground p-3 bg-muted rounded-lg">
+                                            <span className="font-semibold text-foreground">How it works:</span> Requests are routed through a proxy (e.g., ZenRows) to bypass anti-bot detection. You also need an LLM key (OpenAI or Gemini) to parse the results.
+                                        </div>
+                                        <ApiKeyInput
+                                            label="Scraping Service Key"
+                                            value={settings.scrapingApiKey}
+                                            onChange={settings.setScrapingApiKey}
+                                            helperText="ZenRows, ScrapingBee, or similar"
+                                            placeholder="Enter your proxy API key..."
+                                            getKeyUrl="https://www.zenrows.com/"
+                                            onTest={testScrapingKey}
+                                            required={true}
+                                        />
+                                        <ApiKeyInput
+                                            label="OpenAI API Key (for parsing)"
+                                            value={settings.openaiApiKey}
+                                            onChange={settings.setOpenaiApiKey}
+                                            helperText="Used to extract statute from page content"
+                                            getKeyUrl="https://platform.openai.com/api-keys"
+                                            onTest={testOpenAIKey}
+                                        />
+                                        <ApiKeyInput
+                                            label="Gemini API Key (alternative)"
+                                            value={settings.geminiApiKey}
+                                            onChange={settings.setGeminiApiKey}
+                                            helperText="Use if you prefer Gemini for parsing"
+                                            placeholder="AIzp..."
+                                            getKeyUrl="https://aistudio.google.com/app/apikey"
+                                            onTest={testGeminiKey}
                                         />
                                     </div>
                                 )}
@@ -564,6 +709,73 @@ export default function SettingsPage() {
                                         onChange={() => settings.toggleSetting(option.id)}
                                     />
                                 ))}
+
+                                {/* Batch Size Configuration */}
+                                <div className="space-y-4 pt-6 border-t border-border">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <h3 className="text-lg font-medium flex items-center gap-2">
+                                                <Database className="w-4 h-4 text-primary" />
+                                                Batch Size Limit
+                                            </h3>
+                                            <p className="text-sm text-muted-foreground max-w-md mt-1">
+                                                Control how many states are processed in a single API call.
+                                                Lower values increase accuracy but take longer.
+                                            </p>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="text-2xl font-bold font-mono text-primary">
+                                                {settings.batchSize}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground block">
+                                                states/batch
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-6">
+                                        <div className="relative pt-6">
+                                            {/* Custom Range Slider */}
+                                            <input
+                                                type="range"
+                                                min="1"
+                                                max="50"
+                                                step="1"
+                                                value={settings.batchSize}
+                                                onChange={(e) => settings.setBatchSize(parseInt(e.target.value))}
+                                                className="w-full h-2 bg-muted rounded-full appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50 accent-primary"
+                                                style={{
+                                                    backgroundSize: `${((settings.batchSize - 1) * 100) / 49}% 100%`
+                                                }}
+                                            />
+                                            <div className="flex justify-between text-xs text-muted-foreground mt-2 font-medium">
+                                                <span>1 State (Max Quality)</span>
+                                                <span>25 States</span>
+                                                <span>50 States (Max Speed)</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="p-4 bg-muted/40 border border-border/50 rounded-lg text-sm">
+                                            <div className="flex items-start gap-3">
+                                                <div className="p-1.5 bg-primary/10 rounded-md mt-0.5">
+                                                    <Zap className="w-4 h-4 text-primary" />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <p className="font-medium text-foreground">
+                                                        Estimated Performance
+                                                    </p>
+                                                    <p className="text-muted-foreground leading-relaxed">
+                                                        {settings.batchSize === 50
+                                                            ? "Executes 1 massive API call. Fastest method, but LLMs may hallucinate details when processing 50 states at once."
+                                                            : settings.batchSize === 1
+                                                                ? "Executes 50 individual API calls. Extremely thorough and allows for real-time scraping per state, but much slower."
+                                                                : `Executes ${Math.ceil(50 / settings.batchSize)} batches of ~${settings.batchSize} states each. A balance between specficity and speed.`}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </motion.div>
                         )}
 

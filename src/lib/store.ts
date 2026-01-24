@@ -327,7 +327,7 @@ export const useLegalStore = create<LegalStore & StoreActions>((set) => ({
 // Settings Store (useSettingsStore)
 // ============================================================
 
-export type DataSource = 'mock' | 'llm-scraper' | 'official-api';
+export type DataSource = 'mock' | 'llm-scraper' | 'official-api' | 'scraping-proxy';
 export type ThemeColor = 'blue' | 'violet' | 'green' | 'rose' | 'orange';
 
 export interface SettingsState {
@@ -337,8 +337,14 @@ export interface SettingsState {
     openaiApiKey: string;
     /** User's Gemini API key for BYOK */
     geminiApiKey: string;
+    /** User's OpenRouter API key for BYOK */
+    openRouterApiKey: string;
     /** User's Open States API key for official data */
     openStatesApiKey: string;
+    /** User's LegiScan API key for official data */
+    legiscanApiKey: string;
+    /** User's Scraping Service API key (e.g., ZenRows, ScrapingBee) */
+    scrapingApiKey: string;
     /** Enable simultaneous queries across all 50 jurisdictions */
     parallelFetch: boolean;
     /** Automatically run verification checks on returned statutes */
@@ -350,11 +356,16 @@ export interface SettingsState {
     /** Primary theme color */
     themeColor: ThemeColor;
     /** Selected AI provider for scraper */
-    activeAiProvider: 'openai' | 'gemini';
+    activeAiProvider: 'openai' | 'gemini' | 'openrouter';
     /** Selected OpenAI model */
     openaiModel: string;
     /** Selected Gemini model */
     geminiModel: string;
+    /** Selected OpenRouter model */
+    /** Selected OpenRouter model */
+    openRouterModel: string;
+    /** Batch size for queries (1-50) */
+    batchSize: number;
 }
 
 interface SettingsActions {
@@ -364,18 +375,29 @@ interface SettingsActions {
     setOpenaiApiKey: (key: string) => void;
     /** Set the Gemini API key */
     setGeminiApiKey: (key: string) => void;
+    /** Set the OpenRouter API key */
+    setOpenRouterApiKey: (key: string) => void;
     /** Set the Open States API key */
     setOpenStatesApiKey: (key: string) => void;
+
+    /** Set the LegiScan API key */
+    setLegiscanApiKey: (key: string) => void;
+    /** Set the Scraping Service API key */
+    setScrapingApiKey: (key: string) => void;
     /** Set the active AI provider */
-    setActiveAiProvider: (provider: 'openai' | 'gemini') => void;
+    setActiveAiProvider: (provider: 'openai' | 'gemini' | 'openrouter') => void;
     /** Set the OpenAI model */
     setOpenaiModel: (model: string) => void;
     /** Set the Gemini model */
     setGeminiModel: (model: string) => void;
+    /** Set the OpenRouter model */
+    setOpenRouterModel: (model: string) => void;
+    /** Set the batch size */
+    setBatchSize: (size: number) => void;
     /** Update any boolean setting */
-    setSetting: <K extends keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openStatesApiKey' | 'themeColor' | 'openaiModel' | 'geminiModel' | 'activeAiProvider'>>(key: K, value: SettingsState[K]) => void;
+    setSetting: <K extends keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openRouterApiKey' | 'openStatesApiKey' | 'legiscanApiKey' | 'scrapingApiKey' | 'themeColor' | 'openaiModel' | 'geminiModel' | 'openRouterModel' | 'activeAiProvider' | 'batchSize'>>(key: K, value: SettingsState[K]) => void;
     /** Toggle a boolean setting */
-    toggleSetting: (key: keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openStatesApiKey' | 'themeColor' | 'openaiModel' | 'geminiModel' | 'activeAiProvider'>) => void;
+    toggleSetting: (key: keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openRouterApiKey' | 'openStatesApiKey' | 'legiscanApiKey' | 'scrapingApiKey' | 'themeColor' | 'openaiModel' | 'geminiModel' | 'openRouterModel' | 'activeAiProvider' | 'batchSize'>) => void;
     /** Set the theme color */
     setThemeColor: (color: ThemeColor) => void;
 }
@@ -386,7 +408,10 @@ const DEFAULT_SETTINGS: SettingsState = {
     dataSource: 'mock',
     openaiApiKey: '',
     geminiApiKey: '',
+    openRouterApiKey: '',
     openStatesApiKey: '',
+    legiscanApiKey: '',
+    scrapingApiKey: '',
     parallelFetch: true,
     autoVerify: true,
     showConfidence: true,
@@ -395,6 +420,8 @@ const DEFAULT_SETTINGS: SettingsState = {
     activeAiProvider: 'openai',
     openaiModel: 'gpt-4o-mini',
     geminiModel: 'gemini-1.5-flash',
+    openRouterModel: 'openai/gpt-4o-mini',
+    batchSize: 50,
 };
 
 /**
@@ -427,7 +454,10 @@ function persistSettings(settings: SettingsState): void {
             dataSource: settings.dataSource,
             openaiApiKey: settings.openaiApiKey,
             geminiApiKey: settings.geminiApiKey,
+            openRouterApiKey: settings.openRouterApiKey,
             openStatesApiKey: settings.openStatesApiKey,
+            legiscanApiKey: settings.legiscanApiKey,
+            scrapingApiKey: settings.scrapingApiKey,
             parallelFetch: settings.parallelFetch,
             autoVerify: settings.autoVerify,
             showConfidence: settings.showConfidence,
@@ -436,6 +466,8 @@ function persistSettings(settings: SettingsState): void {
             activeAiProvider: settings.activeAiProvider,
             openaiModel: settings.openaiModel,
             geminiModel: settings.geminiModel,
+            openRouterModel: settings.openRouterModel,
+            batchSize: settings.batchSize,
         };
         localStorage.setItem('lawvics-settings', JSON.stringify(stateToPersist));
     } catch {
@@ -461,8 +493,23 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         persistSettings(get());
     },
 
+    setOpenRouterApiKey: (key) => {
+        set({ openRouterApiKey: key });
+        persistSettings(get());
+    },
+
     setOpenStatesApiKey: (key) => {
         set({ openStatesApiKey: key });
+        persistSettings(get());
+    },
+
+    setLegiscanApiKey: (key) => {
+        set({ legiscanApiKey: key });
+        persistSettings(get());
+    },
+
+    setScrapingApiKey: (key) => {
+        set({ scrapingApiKey: key });
         persistSettings(get());
     },
 
@@ -478,6 +525,16 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
     setGeminiModel: (model) => {
         set({ geminiModel: model });
+        persistSettings(get());
+    },
+
+    setOpenRouterModel: (model) => {
+        set({ openRouterModel: model });
+        persistSettings(get());
+    },
+
+    setBatchSize: (size) => {
+        set({ batchSize: size });
         persistSettings(get());
     },
 

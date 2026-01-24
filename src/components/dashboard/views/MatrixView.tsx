@@ -20,7 +20,7 @@ function StatusCell({ status }: { status: Status }) {
         case 'success':
             return <ShieldCheck className="w-4 h-4 text-green-500" />;
         case 'error':
-            return <AlertCircle className="w-4 h-4 text-red-500" />;
+            return <AlertCircle className="w-4 h-4 text-error" />;
         case 'pending':
             return <Clock className="w-4 h-4 text-muted-foreground" />;
     }
@@ -106,7 +106,7 @@ export default function MatrixView() {
                                     <span className={cn(
                                         'text-xs font-semibold',
                                         row.confidence >= 90 ? 'text-green-500' :
-                                            row.confidence >= 80 ? 'text-yellow-500' : 'text-red-500'
+                                            row.confidence >= 80 ? 'text-risk' : 'text-error'
                                     )}>
                                         {row.confidence > 0 ? `${row.confidence}%` : '-'}
                                     </span>
@@ -116,7 +116,7 @@ export default function MatrixView() {
                                         'text-xs px-2 py-0.5 rounded-full',
                                         row.riskLevel === 'Low'
                                             ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                            : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                            : 'bg-risk/15 text-yellow-700 dark:text-risk'
                                     )}>
                                         {row.status === 'pending' ? '-' : row.riskLevel}
                                     </span>

@@ -10,11 +10,32 @@ import { Statute as LegalStatute } from '@/types/legal';
 // Configuration
 // ============================================================
 
-/** Number of states to process concurrently */
-const CHUNK_SIZE = 5;
+/** Number of states to process concurrently (reduced to avoid rate limits) */
+const CHUNK_SIZE = 2;
+
+/** Delay in ms between processing chunks to avoid rate limits */
+const INTER_CHUNK_DELAY_MS = 1500;
 
 /** Default mock mode setting (can be overridden by caller) */
 const DEFAULT_MOCK_MODE = true;
+
+// ============================================================
+// Debug Logger (client-side, checks localStorage)
+// ============================================================
+
+function isDebugMode(): boolean {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('lawvics-debug') === 'true';
+}
+
+const debug = {
+    log: (...args: unknown[]) => isDebugMode() && console.log('[Orchestrator]', ...args),
+    error: (...args: unknown[]) => isDebugMode() && console.error('[Orchestrator]', ...args),
+    time: (label: string) => isDebugMode() && console.time(`[Orchestrator] ${label}`),
+    timeEnd: (label: string) => isDebugMode() && console.timeEnd(`[Orchestrator] ${label}`),
+    group: (label: string) => isDebugMode() && console.group(`[Orchestrator] ${label}`),
+    groupEnd: () => isDebugMode() && console.groupEnd(),
+};
 
 // ============================================================
 // Internal API Client
@@ -89,29 +110,62 @@ async function fetchStatuteFromApi(
     openaiApiKey: string = '' // Deprecated argument
 ): Promise<Statute> {
     const settings = useSettingsStore.getState();
-    const { dataSource, openaiApiKey: storeOpenAiKey, geminiApiKey, openStatesApiKey } = settings;
+    const { dataSource, openaiApiKey: storeOpenAiKey, geminiApiKey, openRouterApiKey, openStatesApiKey, legiscanApiKey, scrapingApiKey } = settings;
 
     // 1. STRICT CLIENT-SIDE MOCK GUARD
     // If we are in mock mode, DO NOT attempt to hit the API at all.
     if (dataSource === 'mock') {
+        debug.log(`[${stateCode}] Using client-side mock`);
         return mockFetchStatute(stateCode, query);
     }
 
     // 2. Real Mode (LLM Scraper or Official API)
+    // Determine which model to use based on provider
+    let aiModel: string;
+    if (settings.activeAiProvider === 'openrouter') {
+        aiModel = settings.openRouterModel;
+    } else if (settings.activeAiProvider === 'gemini') {
+        aiModel = settings.geminiModel;
+    } else {
+        aiModel = settings.openaiModel;
+    }
+
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'x-data-source': dataSource,
         'x-active-provider': settings.activeAiProvider,
-        'x-ai-model': settings.activeAiProvider === 'openai' ? settings.openaiModel : settings.geminiModel
+        'x-ai-model': aiModel
     };
+
+    // Enable server-side debug if client-side debug is on
+    if (isDebugMode()) {
+        headers['x-debug-mode'] = 'true';
+    }
 
     // Attach keys based on selected source
     if (dataSource === 'llm-scraper') {
         if (storeOpenAiKey) headers['x-openai-key'] = storeOpenAiKey;
         if (geminiApiKey) headers['x-gemini-key'] = geminiApiKey;
+        if (openRouterApiKey) headers['x-openrouter-key'] = openRouterApiKey;
+    } else if (dataSource === 'scraping-proxy') {
+        if (scrapingApiKey) headers['x-scraping-key'] = scrapingApiKey;
+        if (storeOpenAiKey) headers['x-openai-key'] = storeOpenAiKey;
+        if (geminiApiKey) headers['x-gemini-key'] = geminiApiKey;
+        if (openRouterApiKey) headers['x-openrouter-key'] = openRouterApiKey;
     } else if (dataSource === 'official-api') {
         if (openStatesApiKey) headers['x-openstates-key'] = openStatesApiKey;
+        if (legiscanApiKey) headers['x-legiscan-key'] = legiscanApiKey;
     }
+
+    debug.log(`[${stateCode}] Fetching with headers:`, {
+        dataSource,
+        hasOpenAI: !!storeOpenAiKey,
+        hasGemini: !!geminiApiKey,
+        hasOpenRouter: !!openRouterApiKey,
+        hasOpenStates: !!openStatesApiKey,
+        hasLegiscan: !!legiscanApiKey
+    });
+    debug.time(`fetch-${stateCode}`);
 
     try {
         const response = await fetch('/api/statute/search', {
@@ -125,16 +179,22 @@ async function fetchStatuteFromApi(
             }),
         });
 
+        debug.timeEnd(`fetch-${stateCode}`);
+        debug.log(`[${stateCode}] Response status:`, response.status);
+
         if (response.status === 404) {
+            debug.error(`[${stateCode}] 404 - API route not found`);
             throw new Error('Real Mode requires a backend server. Please run locally with `npm run dev`.');
         }
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
+            debug.error(`[${stateCode}] Error response:`, errorData);
             throw new Error(errorData.error || `API request failed for ${stateCode}: ${response.statusText}`);
         }
 
         const result: SearchApiResponse = await response.json();
+        debug.log(`[${stateCode}] Result:`, { success: result.success, citation: result.data?.citation });
 
         if (!result.success || !result.data) {
             throw new Error(result.error || `Failed to fetch statute for ${stateCode}`);
@@ -142,8 +202,71 @@ async function fetchStatuteFromApi(
 
         return result.data;
     } catch (error) {
+        debug.error(`[${stateCode}] Fetch error:`, error);
         throw error;
     }
+}
+
+// ============================================================
+// Batch Fetch (Multi-State in Single LLM Call)
+// ============================================================
+
+interface BatchApiResponse {
+    success: boolean;
+    data?: Record<string, Statute>;
+    error?: string;
+}
+
+/**
+ * Fetch statutes for multiple states in a single API call.
+ * Uses the batch endpoint which makes ONE LLM call for all states.
+ * Falls back to individual calls if batch fails.
+ */
+async function fetchBatchStatutes(
+    stateCodes: StateCode[],
+    query: string
+): Promise<Record<string, Statute>> {
+    const settings = useSettingsStore.getState();
+    const { openaiApiKey, geminiApiKey, openRouterApiKey, activeAiProvider, openaiModel, geminiModel, openRouterModel } = settings;
+
+    // Determine which model to use based on provider
+    let aiModel: string;
+    if (activeAiProvider === 'openrouter') {
+        aiModel = openRouterModel;
+    } else if (activeAiProvider === 'gemini') {
+        aiModel = geminiModel;
+    } else {
+        aiModel = openaiModel;
+    }
+
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-active-provider': activeAiProvider,
+        'x-ai-model': aiModel
+    };
+
+    if (openaiApiKey) headers['x-openai-key'] = openaiApiKey;
+    if (geminiApiKey) headers['x-gemini-key'] = geminiApiKey;
+    if (openRouterApiKey) headers['x-openrouter-key'] = openRouterApiKey;
+
+    const response = await fetch('/api/statute/batch', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ stateCodes, query }),
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Batch API failed: ${response.statusText}`);
+    }
+
+    const result: BatchApiResponse = await response.json();
+
+    if (!result.success || !result.data) {
+        throw new Error(result.error || 'Batch API returned no data');
+    }
+
+    return result.data;
 }
 
 // ============================================================
@@ -192,13 +315,23 @@ async function fetchStateStatute(
         // 2. Optional Auto-Verification (Paranoid Mode)
         if (settings.autoVerify && !useMockMode) {
             try {
+                // Determine which model to use for verification
+                let verificationModel: string;
+                if (settings.activeAiProvider === 'openrouter') {
+                    verificationModel = settings.openRouterModel;
+                } else if (settings.activeAiProvider === 'gemini') {
+                    verificationModel = settings.geminiModel;
+                } else {
+                    verificationModel = settings.openaiModel;
+                }
+
                 const verification = await verifyStatuteV2(
                     statute,
                     query,
                     false, // Real verification
-                    { openai: settings.openaiApiKey, gemini: settings.geminiApiKey },
+                    { openai: settings.openaiApiKey, gemini: settings.geminiApiKey, openrouter: settings.openRouterApiKey },
                     settings.activeAiProvider,
-                    settings.activeAiProvider === 'openai' ? settings.openaiModel : settings.geminiModel
+                    verificationModel
                 );
 
                 // Update statute with verification results
@@ -229,39 +362,78 @@ async function fetchStateStatute(
 }
 
 /**
- * Process a chunk of states in parallel for a specific session
- * Returns count of [successes, errors]
+ * Process a chunk of states for a specific session.
+ * For LLM-based modes, uses BATCH API (1 call for all states in chunk).
+ * For mock/official-api, uses individual calls.
  * 
  * @param stateCodes - Array of state codes to process in this chunk
- * @param queries - Map of state codes to their specific search queries
+ * @param query - The user's legal query
  * @param surveyId - The survey session ID
- * @param useMockMode - Whether to use mock data (true) or real scraping (false)
- * @param openaiApiKey - User's OpenAI API key for BYOK support
+ * @param useMockMode - Whether to use mock data
  */
 async function processChunk(
     stateCodes: StateCode[],
-    queries: Record<StateCode, string>,
+    query: string,
     surveyId: number,
-    useMockMode: boolean = DEFAULT_MOCK_MODE,
-    openaiApiKey: string = ''
+    useMockMode: boolean = DEFAULT_MOCK_MODE
 ): Promise<[number, number]> {
-    const promises = stateCodes.map((stateCode) =>
-        fetchStateStatute(stateCode, queries[stateCode], surveyId, useMockMode, openaiApiKey)
-    );
-
-    // Use Promise.allSettled to ensure all complete regardless of failures
-    const results = await Promise.allSettled(promises);
+    const settings = useSettingsStore.getState();
+    const { dataSource, openaiApiKey } = settings;
+    const surveyStore = useSurveyHistoryStore.getState();
 
     let successes = 0;
     let errors = 0;
 
-    results.forEach((result) => {
-        if (result.status === 'fulfilled' && result.value === true) {
-            successes++;
+    // For LLM-based modes:
+    // If chunk has only 1 state, use individual fetch (enables scraping/proxy).
+    // If chunk has >1 state, use batch API (pure LLM generation, no scraping).
+    if (dataSource === 'llm-scraper' || dataSource === 'scraping-proxy') {
+        if (stateCodes.length === 1) {
+            // Single state -> Use scraping logic
+            const stateCode = stateCodes[0];
+            const result = await fetchStateStatute(stateCode, query, surveyId, useMockMode, openaiApiKey);
+            return result ? [1, 0] : [0, 1];
         } else {
-            errors++;
+            // Multiple states -> Use Batch LLM logic
+            try {
+                // Make ONE batch call for all states in chunk
+                const batchResults = await fetchBatchStatutes(stateCodes, query);
+
+                // Process results for each state
+                for (const stateCode of stateCodes) {
+                    const statute = batchResults[stateCode];
+                    if (statute) {
+                        surveyStore.setSessionStatute(surveyId, stateCode, statute);
+                        successes++;
+                    } else {
+                        surveyStore.setSessionError(surveyId, stateCode, new Error(`No result returned for ${stateCode}`));
+                        errors++;
+                    }
+                }
+            } catch (error) {
+                // Batch failed - mark all states as error
+                const errorObj = error instanceof Error ? error : new Error('Batch request failed');
+                for (const stateCode of stateCodes) {
+                    surveyStore.setSessionError(surveyId, stateCode, errorObj);
+                    errors++;
+                }
+            }
         }
-    });
+    } else {
+        // Mock mode or official-api: use individual calls (existing behavior)
+        const promises = stateCodes.map((stateCode) =>
+            fetchStateStatute(stateCode, query, surveyId, useMockMode)
+        );
+
+        const results = await Promise.allSettled(promises);
+        results.forEach((result) => {
+            if (result.status === 'fulfilled' && result.value === true) {
+                successes++;
+            } else {
+                errors++;
+            }
+        });
+    }
 
     return [successes, errors];
 }
@@ -277,19 +449,7 @@ export class MaxConcurrentSurveysError extends Error {
 /**
  * Search all 50 states for statute data
  *
- * This function:
- * 1. Checks concurrency limit (max 5 running surveys)
- * 2. Retrieves the user's OpenAI API key from settings
- * 3. Translates the user query into 50 state-specific queries
- * 4. Processes states in chunks of CHUNK_SIZE to avoid rate limiting
- * 5. Updates the session-specific statute data as each result comes in
- * 6. Completes the survey and triggers a notification
- *
- * @param userQuery - Natural language legal query
- * @param surveyId - The ID of the survey session (created by caller)
- * @param useMockMode - Whether to use mock data (true) or real scraping (false). Defaults to true.
- * @returns void
- * @throws MaxConcurrentSurveysError if 5 surveys already running
+ * Uses settings.batchSize to determine how many states to process in parallel/batch.
  */
 export async function searchAllStates(
     userQuery: string,
@@ -298,6 +458,7 @@ export async function searchAllStates(
 ): Promise<void> {
     const surveyStore = useSurveyHistoryStore.getState();
     const settingsStore = useSettingsStore.getState();
+    const { batchSize } = settingsStore;
 
     // 1. Check concurrency limit
     const runningCount = surveyStore.surveys.filter(s => s.status === 'running').length;
@@ -305,36 +466,90 @@ export async function searchAllStates(
         throw new MaxConcurrentSurveysError();
     }
 
-    // 2. Get user's API key for BYOK support
-    const openaiApiKey = settingsStore.openaiApiKey || '';
-
-    // 3. Generate state-specific queries
-    const queries = await generateStateQueries(userQuery);
-
-    // 4. Split states into chunks
-    const chunks = chunkArray(ALL_STATE_CODES, CHUNK_SIZE);
-
-    // 5. Process each chunk sequentially (chunks in series, states within chunk in parallel)
+    // 2. Process in chunks based on batchSize setting
     let totalSuccesses = 0;
     let totalErrors = 0;
 
+    // Chunk the 50 states according to user preference (1 to 50)
+    const chunks = chunkArray(ALL_STATE_CODES, batchSize);
+
     for (const chunk of chunks) {
-        // Check for cancellation between chunks
         const currentSurvey = useSurveyHistoryStore.getState().surveys.find(s => s.id === surveyId);
         if (currentSurvey?.status === 'cancelled') {
             console.log(`[Orchestrator] Survey #${surveyId} cancelled. Stopping.`);
             return;
         }
 
-        const [successes, errors] = await processChunk(chunk, queries, surveyId, useMockMode, openaiApiKey);
+        const [successes, errors] = await processChunk(chunk, userQuery, surveyId, useMockMode);
         totalSuccesses += successes;
         totalErrors += errors;
+
+        // Small delay between chunks to prevent overwhelming browser/network if batchSize is small
+        if (chunks.length > 1) {
+            await new Promise(resolve => setTimeout(resolve, INTER_CHUNK_DELAY_MS));
+        }
     }
 
-    // Double check status before final completion (don't override cancellation)
     const finalSurvey = useSurveyHistoryStore.getState().surveys.find(s => s.id === surveyId);
     if (finalSurvey?.status === 'cancelled') return;
 
-    // 6. Complete the survey and trigger notification
     surveyStore.completeSurvey(surveyId, totalSuccesses, totalErrors);
+}
+
+// ============================================================
+// Single API Call for All 50 States
+// ============================================================
+
+interface AllStatesApiResponse {
+    success: boolean;
+    data?: Record<string, Statute>;
+    error?: string;
+}
+
+/**
+ * Fetch statute data for ALL 50 states in a SINGLE API call.
+ * Uses the all-states endpoint which makes ONE LLM call.
+ */
+async function fetchAllStatesAtOnce(query: string): Promise<Record<string, Statute>> {
+    const settings = useSettingsStore.getState();
+    const { openaiApiKey, geminiApiKey, openRouterApiKey, activeAiProvider, openaiModel, geminiModel, openRouterModel } = settings;
+
+    // Determine which model to use based on provider
+    let aiModel: string;
+    if (activeAiProvider === 'openrouter') {
+        aiModel = openRouterModel;
+    } else if (activeAiProvider === 'gemini') {
+        aiModel = geminiModel;
+    } else {
+        aiModel = openaiModel;
+    }
+
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-active-provider': activeAiProvider,
+        'x-ai-model': aiModel
+    };
+
+    if (openaiApiKey) headers['x-openai-key'] = openaiApiKey;
+    if (geminiApiKey) headers['x-gemini-key'] = geminiApiKey;
+    if (openRouterApiKey) headers['x-openrouter-key'] = openRouterApiKey;
+
+    const response = await fetch('/api/statute/all-states', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ query }),
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `API failed: ${response.statusText}`);
+    }
+
+    const result: AllStatesApiResponse = await response.json();
+
+    if (!result.success || !result.data) {
+        throw new Error(result.error || 'API returned no data');
+    }
+
+    return result.data;
 }

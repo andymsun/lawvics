@@ -35,6 +35,12 @@
   --input: #e2e8f0;
   --ring: #3b82f6;
   --radius: 0.5rem;
+  --risk: #eab308;
+  /* yellow-500 */
+  --risk-foreground: #000000;
+  --error: #ef4444;
+  /* red-500 */
+  --error-foreground: #ffffff;
 }
 
 @theme inline {
@@ -57,6 +63,10 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-risk: var(--risk);
+  --color-risk-foreground: var(--risk-foreground);
+  --color-error: var(--error);
+  --color-error-foreground: var(--error-foreground);
   --radius-sm: calc(var(--radius) - 2px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -96,6 +106,12 @@
   /* slate-700 */
   --input: #334155;
   --ring: #3b82f6;
+  --risk: #facc15;
+  /* yellow-400 slightly brighter for dark mode */
+  --risk-foreground: #000000;
+  --error: #ef4444;
+  /* red-500 keeps good contrast */
+  --error-foreground: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -119,6 +135,10 @@
     --border: #334155;
     --input: #334155;
     --ring: #3b82f6;
+    --risk: #facc15;
+    --risk-foreground: #000000;
+    --error: #ef4444;
+    --error-foreground: #ffffff;
   }
 }
 

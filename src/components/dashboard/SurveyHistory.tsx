@@ -35,7 +35,7 @@ function StatusBadge({ status, progress }: { status: SurveyRecord['status']; pro
             );
         case 'failed':
             return (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-error/15 text-error dark:border-error/30">
                     <AlertCircle className="w-3 h-3" />
                     Failed
                 </span>
@@ -48,6 +48,17 @@ function StatusBadge({ status, progress }: { status: SurveyRecord['status']; pro
                 </span>
             );
     }
+}
+
+function formatDuration(ms: number): string {
+    if (ms < 1000) return '<1s';
+    const seconds = Math.floor((ms / 1000) % 60);
+    const minutes = Math.floor((ms / (1000 * 60)) % 60);
+    const hours = Math.floor(ms / (1000 * 60 * 60));
+
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    if (minutes > 0) return `${minutes}m ${seconds}s`;
+    return `${seconds}s`;
 }
 
 export function SurveyHistory() {
@@ -68,45 +79,65 @@ export function SurveyHistory() {
 
     return (
         <div className="space-y-2">
-            {surveys.map((survey) => (
-                <button
-                    key={survey.id}
-                    onClick={() => setActiveSurvey(survey.id)}
-                    className={cn(
-                        'w-full text-left p-3 rounded-lg border transition-colors',
-                        activeSurveyId === survey.id
-                            ? 'bg-primary/5 border-primary/30'
-                            : 'bg-card border-border hover:bg-muted'
-                    )}
-                >
-                    <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs font-mono text-muted-foreground">
-                                    #{survey.id}
-                                </span>
-                                <StatusBadge
-                                    status={survey.status}
-                                    progress={survey.status === 'running' ? Math.round((Object.keys(survey.statutes || {}).length / 50) * 100) : undefined}
-                                />
-                            </div>
-                            <p className="mt-1 text-sm font-medium truncate">
-                                {survey.query}
-                            </p>
-                            <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
-                                <span>{formatTime(survey.startedAt)}</span>
-                                {survey.status !== 'running' && (
-                                    <>
-                                        <span>•</span>
-                                        <span className="text-green-500">{survey.successCount} success</span>
-                                        <span className="text-red-500">{survey.errorCount} errors</span>
-                                    </>
-                                )}
+            {surveys.map((survey) => {
+                const riskCount = Object.values(survey.statutes || {}).filter(entry => {
+                    if (!entry || entry instanceof Error) return false;
+                    return entry.confidenceScore < 85 || entry.trustLevel === 'suspicious';
+                }).length;
+
+                // Calculate duration
+                // Note: For running surveys, this is "time since start" at moment of render
+                // To animate, we'd need a separate component with interval
+                const duration = survey.status === 'running'
+                    ? Date.now() - survey.startedAt
+                    : (survey.completedAt ? survey.completedAt - survey.startedAt : 0);
+
+                return (
+                    <button
+                        key={survey.id}
+                        onClick={() => setActiveSurvey(survey.id)}
+                        className={cn(
+                            'w-full text-left p-3 rounded-lg border transition-colors',
+                            activeSurveyId === survey.id
+                                ? 'bg-primary/5 border-primary/30'
+                                : 'bg-card border-border hover:bg-muted'
+                        )}
+                    >
+                        <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs font-mono text-muted-foreground">
+                                        #{survey.id}
+                                    </span>
+                                    <StatusBadge
+                                        status={survey.status}
+                                        progress={survey.status === 'running' ? Math.round((Object.keys(survey.statutes || {}).length / 50) * 100) : undefined}
+                                    />
+                                    {duration > 0 && (
+                                        <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground ml-auto">
+                                            {survey.status === 'running' ? 'Running: ' : ''}{formatDuration(duration)}
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="mt-1 text-sm font-medium truncate" title={survey.query}>
+                                    {survey.query}
+                                </p>
+                                <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+                                    <span>{formatTime(survey.startedAt)}</span>
+                                    {survey.status !== 'running' && (
+                                        <>
+                                            <span>•</span>
+                                            <span className="text-green-500">{survey.successCount} success</span>
+                                            {riskCount > 0 && <span className="text-risk">{riskCount} risk</span>}
+                                            <span className="text-error">{survey.errorCount} errors</span>
+                                        </>
+                                    )}
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </button>
-            ))}
+                    </button>
+                );
+            })}
         </div>
     );
 }
