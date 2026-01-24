@@ -155,6 +155,57 @@ async function fetchStatuteFromApi(
 }
 
 // ============================================================
+// Batch Fetch (Multi-State in Single LLM Call)
+// ============================================================
+
+interface BatchApiResponse {
+    success: boolean;
+    data?: Record<string, Statute>;
+    error?: string;
+}
+
+/**
+ * Fetch statutes for multiple states in a single API call.
+ * Uses the batch endpoint which makes ONE LLM call for all states.
+ * Falls back to individual calls if batch fails.
+ */
+async function fetchBatchStatutes(
+    stateCodes: StateCode[],
+    query: string
+): Promise<Record<string, Statute>> {
+    const settings = useSettingsStore.getState();
+    const { openaiApiKey, geminiApiKey, activeAiProvider, openaiModel, geminiModel } = settings;
+
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-active-provider': activeAiProvider,
+        'x-ai-model': activeAiProvider === 'openai' ? openaiModel : geminiModel
+    };
+
+    if (openaiApiKey) headers['x-openai-key'] = openaiApiKey;
+    if (geminiApiKey) headers['x-gemini-key'] = geminiApiKey;
+
+    const response = await fetch('/api/statute/batch', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ stateCodes, query }),
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Batch API failed: ${response.statusText}`);
+    }
+
+    const result: BatchApiResponse = await response.json();
+
+    if (!result.success || !result.data) {
+        throw new Error(result.error || 'Batch API returned no data');
+    }
+
+    return result.data;
+}
+
+// ============================================================
 // Chunking Utility
 // ============================================================
 
@@ -237,39 +288,68 @@ async function fetchStateStatute(
 }
 
 /**
- * Process a chunk of states in parallel for a specific session
- * Returns count of [successes, errors]
+ * Process a chunk of states for a specific session.
+ * For LLM-based modes, uses BATCH API (1 call for all states in chunk).
+ * For mock/official-api, uses individual calls.
  * 
  * @param stateCodes - Array of state codes to process in this chunk
- * @param queries - Map of state codes to their specific search queries
+ * @param query - The user's legal query
  * @param surveyId - The survey session ID
- * @param useMockMode - Whether to use mock data (true) or real scraping (false)
- * @param openaiApiKey - User's OpenAI API key for BYOK support
+ * @param useMockMode - Whether to use mock data
  */
 async function processChunk(
     stateCodes: StateCode[],
-    queries: Record<StateCode, string>,
+    query: string,
     surveyId: number,
-    useMockMode: boolean = DEFAULT_MOCK_MODE,
-    openaiApiKey: string = ''
+    useMockMode: boolean = DEFAULT_MOCK_MODE
 ): Promise<[number, number]> {
-    const promises = stateCodes.map((stateCode) =>
-        fetchStateStatute(stateCode, queries[stateCode], surveyId, useMockMode, openaiApiKey)
-    );
-
-    // Use Promise.allSettled to ensure all complete regardless of failures
-    const results = await Promise.allSettled(promises);
+    const settings = useSettingsStore.getState();
+    const { dataSource } = settings;
+    const surveyStore = useSurveyHistoryStore.getState();
 
     let successes = 0;
     let errors = 0;
 
-    results.forEach((result) => {
-        if (result.status === 'fulfilled' && result.value === true) {
-            successes++;
-        } else {
-            errors++;
+    // For LLM-based modes, use batch API (single call for all states in chunk)
+    if (dataSource === 'llm-scraper' || dataSource === 'scraping-proxy') {
+        try {
+            // Make ONE batch call for all states in chunk
+            const batchResults = await fetchBatchStatutes(stateCodes, query);
+
+            // Process results for each state
+            for (const stateCode of stateCodes) {
+                const statute = batchResults[stateCode];
+                if (statute) {
+                    surveyStore.setSessionStatute(surveyId, stateCode, statute);
+                    successes++;
+                } else {
+                    surveyStore.setSessionError(surveyId, stateCode, new Error(`No result returned for ${stateCode}`));
+                    errors++;
+                }
+            }
+        } catch (error) {
+            // Batch failed - mark all states as error
+            const errorObj = error instanceof Error ? error : new Error('Batch request failed');
+            for (const stateCode of stateCodes) {
+                surveyStore.setSessionError(surveyId, stateCode, errorObj);
+                errors++;
+            }
         }
-    });
+    } else {
+        // Mock mode or official-api: use individual calls (existing behavior)
+        const promises = stateCodes.map((stateCode) =>
+            fetchStateStatute(stateCode, query, surveyId, useMockMode)
+        );
+
+        const results = await Promise.allSettled(promises);
+        results.forEach((result) => {
+            if (result.status === 'fulfilled' && result.value === true) {
+                successes++;
+            } else {
+                errors++;
+            }
+        });
+    }
 
     return [successes, errors];
 }
@@ -334,7 +414,7 @@ export async function searchAllStates(
             return;
         }
 
-        const [successes, errors] = await processChunk(chunk, queries, surveyId, useMockMode, openaiApiKey);
+        const [successes, errors] = await processChunk(chunk, userQuery, surveyId, useMockMode);
         totalSuccesses += successes;
         totalErrors += errors;
 
