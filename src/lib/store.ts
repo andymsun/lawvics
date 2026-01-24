@@ -127,7 +127,7 @@ export interface SurveyRecord {
     completedAt?: number;
     successCount: number;
     errorCount: number;
-    status: 'running' | 'completed' | 'failed';
+    status: 'running' | 'completed' | 'failed' | 'cancelled';
     /** Per-session statute data - each survey owns its results */
     statutes: Partial<Record<StateCode, StatuteEntry>>;
 }
@@ -148,6 +148,8 @@ interface SurveyHistoryActions {
     setSessionStatute: (surveyId: number, stateCode: StateCode, data: StatuteType) => void;
     /** Set an error for a specific session */
     setSessionError: (surveyId: number, stateCode: StateCode, error: Error) => void;
+    /** Cancel a running survey */
+    cancelSurvey: (id: number) => void;
 }
 
 export type SurveyHistoryStore = SurveyHistoryState & SurveyHistoryActions;
@@ -230,6 +232,21 @@ export const useSurveyHistoryStore = create<SurveyHistoryStore>((set, get) => ({
                     : s
             ),
         })),
+
+    cancelSurvey: (id) => {
+        set((state) => ({
+            surveys: state.surveys.map((s) =>
+                s.id === id ? { ...s, status: 'cancelled', completedAt: Date.now() } : s
+            ),
+        }));
+
+        useNotificationStore.getState().addNotification({
+            icon: 'info',
+            title: `Survey #${id} Cancelled`,
+            description: `The 50-state survey was stopped by the user.`,
+            time: 'Just now',
+        });
+    },
 
     // UI Actions
     setActiveState: (code) => set({ activeStateCode: code }),
@@ -332,6 +349,12 @@ export interface SettingsState {
     cacheResults: boolean;
     /** Primary theme color */
     themeColor: ThemeColor;
+    /** Selected AI provider for scraper */
+    activeAiProvider: 'openai' | 'gemini';
+    /** Selected OpenAI model */
+    openaiModel: string;
+    /** Selected Gemini model */
+    geminiModel: string;
 }
 
 interface SettingsActions {
@@ -343,10 +366,16 @@ interface SettingsActions {
     setGeminiApiKey: (key: string) => void;
     /** Set the Open States API key */
     setOpenStatesApiKey: (key: string) => void;
+    /** Set the active AI provider */
+    setActiveAiProvider: (provider: 'openai' | 'gemini') => void;
+    /** Set the OpenAI model */
+    setOpenaiModel: (model: string) => void;
+    /** Set the Gemini model */
+    setGeminiModel: (model: string) => void;
     /** Update any boolean setting */
-    setSetting: <K extends keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openStatesApiKey' | 'themeColor'>>(key: K, value: SettingsState[K]) => void;
+    setSetting: <K extends keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openStatesApiKey' | 'themeColor' | 'openaiModel' | 'geminiModel' | 'activeAiProvider'>>(key: K, value: SettingsState[K]) => void;
     /** Toggle a boolean setting */
-    toggleSetting: (key: keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openStatesApiKey' | 'themeColor'>) => void;
+    toggleSetting: (key: keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openStatesApiKey' | 'themeColor' | 'openaiModel' | 'geminiModel' | 'activeAiProvider'>) => void;
     /** Set the theme color */
     setThemeColor: (color: ThemeColor) => void;
 }
@@ -363,6 +392,9 @@ const DEFAULT_SETTINGS: SettingsState = {
     showConfidence: true,
     cacheResults: false,
     themeColor: 'blue',
+    activeAiProvider: 'openai',
+    openaiModel: 'gpt-4o-mini',
+    geminiModel: 'gemini-1.5-flash',
 };
 
 /**
@@ -401,6 +433,9 @@ function persistSettings(settings: SettingsState): void {
             showConfidence: settings.showConfidence,
             cacheResults: settings.cacheResults,
             themeColor: settings.themeColor,
+            activeAiProvider: settings.activeAiProvider,
+            openaiModel: settings.openaiModel,
+            geminiModel: settings.geminiModel,
         };
         localStorage.setItem('lawvics-settings', JSON.stringify(stateToPersist));
     } catch {
@@ -428,6 +463,21 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
     setOpenStatesApiKey: (key) => {
         set({ openStatesApiKey: key });
+        persistSettings(get());
+    },
+
+    setActiveAiProvider: (provider) => {
+        set({ activeAiProvider: provider });
+        persistSettings(get());
+    },
+
+    setOpenaiModel: (model) => {
+        set({ openaiModel: model });
+        persistSettings(get());
+    },
+
+    setGeminiModel: (model) => {
+        set({ geminiModel: model });
         persistSettings(get());
     },
 

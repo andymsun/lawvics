@@ -81,8 +81,8 @@ export default function StatuteDetailPanel() {
                         {/* Content */}
                         <div className="p-6 space-y-6">
                             {isError ? (
-                                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-600 dark:text-red-400">
-                                    <h3 className="font-semibold mb-1">Error Fetching Data</h3>
+                                <div className="p-4 bg-slate-500/10 border border-slate-500/20 rounded-lg text-slate-600 dark:text-slate-400">
+                                    <h3 className="font-semibold mb-1">System Error</h3>
                                     <p className="text-sm">{(selectedStatuteEntry as Error).message}</p>
                                 </div>
                             ) : statute ? (

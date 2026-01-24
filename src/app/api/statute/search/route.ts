@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { StateCode, Statute } from '@/types/statute';
+import { createOpenAI } from '@ai-sdk/openai';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { generateObject } from 'ai';
+import { z } from 'zod';
+import * as cheerio from 'cheerio';
 
 // ============================================================
 // Types
@@ -18,13 +23,9 @@ interface SearchResponse {
 }
 
 // ============================================================
-// State Legislature URLs & Fetcher Registry
+// State Legislature URLs
 // ============================================================
 
-/**
- * Base URLs for state legislature websites.
- * Used as fallback when no official API is available.
- */
 const STATE_LEGISLATURE_URLS: Partial<Record<StateCode, string>> = {
     AL: 'https://alison.legislature.state.al.us/',
     AK: 'https://www.akleg.gov/',
@@ -78,260 +79,174 @@ const STATE_LEGISLATURE_URLS: Partial<Record<StateCode, string>> = {
     WY: 'https://www.wyoleg.gov/',
 };
 
-/**
- * Type for state-specific fetcher functions.
- * Can be swapped with official APIs like Open States when available.
- */
-type StateFetcher = (stateCode: StateCode, query: string) => Promise<Statute>;
-
-/**
- * Registry for state-specific API fetchers.
- * Add official API implementations here to bypass web scraping.
- * 
- * Example:
- * ```ts
- * STATE_API_FETCHERS['NY'] = async (stateCode, query) => {
- *   const response = await fetch(`https://api.openstates.org/v3/...`);
- *   return parseOpenStatesResponse(response);
- * };
- * ```
- */
-const STATE_API_FETCHERS: Partial<Record<StateCode, StateFetcher>> = {
-    // Add official API implementations here as they become available
-};
-
 // ============================================================
-// Mock Data Generator
+// AI Model Factory
 // ============================================================
 
-function generateMockStatute(stateCode: StateCode, query: string): Statute {
-    const limitationYears = Math.random() > 0.5 ? 2 : 5;
-    return {
-        stateCode,
-        citation: `${stateCode} Code § ${Math.floor(Math.random() * 1000)}.${Math.floor(Math.random() * 100)}`,
-        textSnippet: `The limitation period for ${query} in ${stateCode} is ${limitationYears} years from the date of discovery...`,
-        effectiveDate: '2024-01-01',
-        confidenceScore: Math.floor(Math.random() * 20) + 80,
-        sourceUrl: `https://legislature.${stateCode.toLowerCase()}.gov/statutes`,
-    };
-}
-
-async function mockFetchStatute(stateCode: StateCode, query: string): Promise<Statute> {
-    // Random delay between 500ms-1.5s to simulate network latency
-    const delay = Math.random() * 1000 + 500;
-    await new Promise((resolve) => setTimeout(resolve, delay));
-
-    // Simulate 5% failure rate
-    if (Math.random() < 0.05) {
-        throw new Error(`Connection timeout for ${stateCode}`);
+function getModel(keys: { openai?: string; gemini?: string }, providerPreference: 'openai' | 'gemini', modelName?: string) {
+    if (providerPreference === 'openai' && keys.openai) {
+        const provider = createOpenAI({ apiKey: keys.openai });
+        return provider(modelName || 'gpt-4o-mini');
+    }
+    if (providerPreference === 'gemini' && keys.gemini) {
+        const provider = createGoogleGenerativeAI({ apiKey: keys.gemini });
+        return provider(modelName || 'gemini-1.5-flash');
     }
 
-    return generateMockStatute(stateCode, query);
+    // Fallback logic
+    if (keys.openai) return createOpenAI({ apiKey: keys.openai })('gpt-4o-mini');
+    if (keys.gemini) return createGoogleGenerativeAI({ apiKey: keys.gemini })('gemini-1.5-flash');
+
+    throw new Error('No valid API key provided for LLM Scraper mode.');
 }
 
 // ============================================================
-// Real Mode Fetcher (Fetch-based, no Playwright)
+// Scraper Implementation
 // ============================================================
 
-/**
- * Fetch statute data from state legislature website using simple HTTP.
- * This is a placeholder for real scraping - returns enhanced mock data.
- * 
- * For production, you'd integrate with:
- * - Open States API (https://openstates.org/)
- * - State-specific official APIs
- * - A dedicated scraping service
- * 
- * @param stateCode - The 2-letter state code
- * @param query - The legal query to search for
- * @param openaiApiKey - User's OpenAI API key (for future LLM-based content extraction)
- */
-async function scrapeStateStatute(stateCode: StateCode, query: string, openaiApiKey: string): Promise<Statute> {
+const ScraperSchema = z.object({
+    citation: z.string().describe('The legal citation (e.g., "CA Penal Code § 123")'),
+    textSnippet: z.string().describe('The relevant snippet of the statute text'),
+    effectiveDate: z.string().describe('The effective date if found, otherwise "Unknown"'),
+    confidence: z.number().min(0).max(100).describe('Confidence score from 0-100'),
+});
+
+async function scrapeStateStatute(
+    stateCode: StateCode,
+    query: string,
+    keys: { openai?: string; gemini?: string },
+    activeProvider: 'openai' | 'gemini' = 'openai',
+    aiModel?: string
+): Promise<Statute> {
     const baseUrl = STATE_LEGISLATURE_URLS[stateCode];
+    if (!baseUrl) throw new Error(`No URL for ${stateCode}`);
 
-    if (!baseUrl) {
-        throw new Error(`No legislature URL configured for state: ${stateCode}`);
+    try {
+        // 1. Fetch the page content
+        const res = await fetch(baseUrl, { next: { revalidate: 3600 } });
+        const html = await res.text();
+        const $ = cheerio.load(html);
+
+        // 2. Clean text (remove scripts, styles, etc.)
+        $('script, style, nav, footer').remove();
+        const cleanText = $('body').text().replace(/\s+/g, ' ').substring(0, 15000);
+
+        // 3. LLM Extraction
+        const model = getModel(keys, activeProvider, aiModel);
+        const { object } = await generateObject({
+            model,
+            schema: ScraperSchema,
+            prompt: `Extract statute information for the query "${query}" from the following text from ${stateCode}'s legislature website:
+            
+            TEXT:
+            "${cleanText}"
+            
+            If no specific statute is found, return the best match or state "None found" in citation.`,
+        });
+
+        return {
+            stateCode,
+            citation: object.citation,
+            textSnippet: object.textSnippet,
+            effectiveDate: object.effectiveDate,
+            confidenceScore: object.confidence,
+            sourceUrl: baseUrl,
+        };
+    } catch (error) {
+        console.error(`Scrape failed for ${stateCode}:`, error);
+        throw new Error(`Failed to scrape ${stateCode} legislature: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-
-    // For now, return enhanced mock data with the real source URL
-    // In the future, this would use fetch() + LLM to extract statute info
-    const limitationYears = Math.random() > 0.5 ? 2 : 5;
-
-    // Simulate some network latency for realistic feel
-    await new Promise(resolve => setTimeout(resolve, Math.random() * 2000 + 1000));
-
-    return {
-        stateCode,
-        citation: `${stateCode} Code § ${Math.floor(Math.random() * 1000)}.${Math.floor(Math.random() * 100)}`,
-        textSnippet: `[Real Mode Placeholder] The limitation period for ${query} in ${stateCode} is ${limitationYears} years. Source: ${baseUrl}`,
-        effectiveDate: new Date().toISOString().split('T')[0],
-        confidenceScore: 50, // Lower confidence - placeholder data
-        sourceUrl: baseUrl,
-    };
 }
 
 // ============================================================
-// Main Fetcher with Fallback Chain
+// Open States Client
 // ============================================================
-
-/**
- * Fetch statute data for a state using the best available method.
- * 
- * @param stateCode - The 2-letter state code
- * @param query - The legal query to search for
- * @param openaiApiKey - User's OpenAI API key for BYOK (used for LLM verification)
- */
-// ============================================================
-// Open States API Client
-// ============================================================
-
-const STATE_NAMES: Record<StateCode, string> = {
-    AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California",
-    CO: "Colorado", CT: "Connecticut", DE: "Delaware", FL: "Florida", GA: "Georgia",
-    HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa",
-    KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland",
-    MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi", MO: "Missouri",
-    MT: "Montana", NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "Newsey",
-    NM: "New Mexico", NY: "New York", NC: "North Carolina", ND: "North Dakota", OH: "Ohio",
-    OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina",
-    SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont",
-    VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming"
-};
 
 async function fetchOpenStates(stateCode: StateCode, query: string, apiKey: string): Promise<Statute> {
-    const stateName = STATE_NAMES[stateCode]; // Open States uses full names for jurisdictions often
+    const url = `https://v3.openstates.org/bills?jurisdiction=${stateCode}&q=${encodeURIComponent(query)}&sort=updated_desc&per_page=1&apikey=${apiKey}`;
 
-    // Using the bills endpoint (simplified)
-    const url = `https://v3.openstates.org/bills?jurisdiction=${encodeURIComponent(stateName)}&q=${encodeURIComponent(query)}&sort=updated_desc&per_page=1&apikey=${apiKey}`;
-
-    const response = await fetch(url);
-
-    if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
-            throw new Error('Invalid Open States API Key');
-        }
-        throw new Error(`Open States API error: ${response.statusText}`);
+    const res = await fetch(url);
+    if (!res.ok) {
+        if (res.status === 401 || res.status === 403) throw new Error('Invalid Open States API Key');
+        throw new Error(`Open States API error: ${res.statusText}`);
     }
 
-    const data = await response.json();
+    const data = await res.json();
     const bill = data.results?.[0];
 
-    if (!bill) {
-        throw new Error(`No statutes found for "${query}" in ${stateName}`);
-    }
+    if (!bill) throw new Error(`No statutes found for "${query}" in ${stateCode} via Open States`);
 
     return {
         stateCode,
         citation: bill.identifier || 'Unknown Citation',
         textSnippet: bill.title || 'No text available',
         effectiveDate: bill.updated_at || new Date().toISOString(),
-        confidenceScore: 95, // High confidence for official data
-        sourceUrl: bill.openstates_url || `https://openstates.org/${stateCode.toLowerCase()}/bills`,
+        confidenceScore: 95,
+        sourceUrl: bill.openstates_url || `https://openstates.org/jurisdictions/${stateCode.toLowerCase()}`,
     };
-}
-
-// ============================================================
-// Main Fetcher with Fallback Chain
-// ============================================================
-
-/**
- * Fetch statute data using the configured data source.
- */
-async function fetchStatute(
-    stateCode: StateCode,
-    query: string,
-    dataSource: string,
-    keys: { openai?: string; gemini?: string; openStates?: string }
-): Promise<Statute> {
-
-    // 1. Official API (Open States)
-    if (dataSource === 'official-api') {
-        if (!keys.openStates) {
-            throw new Error('Open States API Key is required for this mode.');
-        }
-        try {
-            return await fetchOpenStates(stateCode, query, keys.openStates);
-        } catch (error) {
-            console.warn(`Open States fetch failed for ${stateCode}:`, error);
-            throw error; // Propagate error for UI
-        }
-    }
-
-    // 2. LLM Scraper (Placeholder / Fetch-based fallback)
-    if (dataSource === 'llm-scraper') {
-        const apiKey = keys.openai || keys.gemini;
-        if (!apiKey) {
-            throw new Error('OpenAI or Gemini API Key is required for AI Scraper mode.');
-        }
-        // Use existing scraper logic (modified to accept generic key)
-        return await scrapeStateStatute(stateCode, query, apiKey as string);
-    }
-
-    // 3. Fallback / Mock
-    return await mockFetchStatute(stateCode, query);
 }
 
 // ============================================================
 // API Route Handler
 // ============================================================
 
-/**
- * Validates an OpenAI/Gemini API key format.
- */
-function isValidApiKeyFormat(apiKey: string): boolean {
-    return apiKey.length >= 20; // Simplified check
-}
-
 export async function POST(request: NextRequest): Promise<NextResponse<SearchResponse>> {
     try {
         const body: SearchRequest = await request.json();
         const { stateCode, query } = body;
 
-        // Validate required fields
         if (!stateCode || !query) {
-            return NextResponse.json(
-                { success: false, error: 'Missing required fields: stateCode and query' },
-                { status: 400 }
-            );
+            return NextResponse.json({ success: false, error: 'Missing stateCode or query' }, { status: 400 });
         }
 
-        // Extract headers
         const dataSource = request.headers.get('x-data-source') || 'mock';
         const openaiApiKey = request.headers.get('x-openai-key') || undefined;
         const geminiApiKey = request.headers.get('x-gemini-key') || undefined;
         const openStatesApiKey = request.headers.get('x-openstates-key') || undefined;
-        const useMockMode = dataSource === 'mock';
+        const activeProvider = request.headers.get('x-active-provider') as 'openai' | 'gemini' | null;
+        const aiModel = request.headers.get('x-ai-model') || undefined;
 
-        let statute: Statute;
-
-        if (useMockMode) {
-            statute = await mockFetchStatute(stateCode, query);
-        } else {
-            // Real mode with data source switching
-            statute = await fetchStatute(stateCode, query, dataSource, {
-                openai: openaiApiKey,
-                gemini: geminiApiKey,
-                openStates: openStatesApiKey
+        if (dataSource === 'mock') {
+            // Simplified mock delay
+            await new Promise(r => setTimeout(r, 800 + Math.random() * 1000));
+            const limitationYears = Math.random() > 0.5 ? 2 : 5;
+            return NextResponse.json({
+                success: true,
+                data: {
+                    stateCode,
+                    citation: `${stateCode} Code § ${Math.floor(Math.random() * 1000)}`,
+                    textSnippet: `[MOCK] The limitation period for ${query} is ${limitationYears} years.`,
+                    effectiveDate: '2024-01-01',
+                    confidenceScore: 85,
+                    sourceUrl: STATE_LEGISLATURE_URLS[stateCode] || 'https://example.gov',
+                }
             });
         }
 
-        return NextResponse.json({
-            success: true,
-            data: statute,
-        });
+        let statute: Statute;
+
+        if (dataSource === 'official-api') {
+            if (!openStatesApiKey) throw new Error('Open States API Key required');
+            statute = await fetchOpenStates(stateCode, query, openStatesApiKey);
+        } else if (dataSource === 'llm-scraper') {
+            statute = await scrapeStateStatute(
+                stateCode,
+                query,
+                { openai: openaiApiKey, gemini: geminiApiKey },
+                activeProvider || (openaiApiKey ? 'openai' : 'gemini'),
+                aiModel
+            );
+        } else {
+            throw new Error(`Unsupported data source: ${dataSource}`);
+        }
+
+        return NextResponse.json({ success: true, data: statute });
     } catch (error) {
-        // SECURITY: Generic error message to avoid leaking sensitive info
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-
-        // Only log non-sensitive error info (never log API keys)
-        console.error('Statute search error:', errorMessage);
-
+        console.error('Search error:', error);
         return NextResponse.json(
-            {
-                success: false,
-                error: errorMessage,
-            },
+            { success: false, error: error instanceof Error ? error.message : 'Internal Server Error' },
             { status: 500 }
         );
     }
 }
+

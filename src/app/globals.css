@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+.font-cursive {
+  font-family: var(--font-cursive), cursive;
+}
+
 :root {
   /* Default Blue Theme (Friendlier Tones) */
   --background: #f8fafc;

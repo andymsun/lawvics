@@ -40,6 +40,13 @@ function StatusBadge({ status, progress }: { status: SurveyRecord['status']; pro
                     Failed
                 </span>
             );
+        case 'cancelled':
+            return (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-400">
+                    <Clock className="w-3 h-3" />
+                    Cancelled
+                </span>
+            );
     }
 }
 

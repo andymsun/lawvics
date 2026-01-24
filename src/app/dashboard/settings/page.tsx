@@ -6,6 +6,7 @@ import { Settings, Zap, AlertTriangle, Key, Eye, EyeOff, Database, Bot, Globe, M
 import { useSettingsStore, DataSource } from '@/lib/store';
 import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 // ============================================================
 // Premium Toggle Switch Component
@@ -384,7 +385,6 @@ export default function SettingsPage() {
 
     return (
         <div className="h-full flex flex-col p-6 space-y-6">
-
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="space-y-1">
@@ -394,7 +394,6 @@ export default function SettingsPage() {
             </div>
 
             <div className="flex-1 bg-card border border-border rounded-xl shadow-sm overflow-hidden flex flex-col md:flex-row">
-
                 {/* Sidebar / Tabs */}
                 <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-border p-4 bg-muted/20">
                     <div className="space-y-1">
@@ -439,7 +438,70 @@ export default function SettingsPage() {
 
                                 {/* API Keys based on Data Source */}
                                 {settings.dataSource === 'llm-scraper' && (
-                                    <div className="space-y-4 pt-4 border-t border-border animate-in fade-in slide-in-from-top-4">
+                                    <div className="space-y-6 pt-6 border-t border-border animate-in fade-in slide-in-from-top-4">
+                                        <div>
+                                            <h3 className="text-lg font-semibold mb-1">Model Configuration</h3>
+                                            <p className="text-muted-foreground text-sm">
+                                                Select which AI provider and specific model to use for scraping.
+                                            </p>
+                                        </div>
+
+                                        {/* Provider Selection (Tabs-like) */}
+                                        <div className="flex p-1 bg-muted rounded-lg w-fit">
+                                            <button
+                                                onClick={() => settings.setActiveAiProvider('openai')}
+                                                className={cn(
+                                                    "px-4 py-1.5 rounded-md text-sm font-medium transition-all",
+                                                    settings.activeAiProvider === 'openai'
+                                                        ? "bg-background text-foreground shadow-sm"
+                                                        : "text-muted-foreground hover:text-foreground"
+                                                )}
+                                            >
+                                                OpenAI
+                                            </button>
+                                            <button
+                                                onClick={() => settings.setActiveAiProvider('gemini')}
+                                                className={cn(
+                                                    "px-4 py-1.5 rounded-md text-sm font-medium transition-all",
+                                                    settings.activeAiProvider === 'gemini'
+                                                        ? "bg-background text-foreground shadow-sm"
+                                                        : "text-muted-foreground hover:text-foreground"
+                                                )}
+                                            >
+                                                Gemini
+                                            </button>
+                                        </div>
+
+                                        {/* Model Dropdown based on Provider */}
+                                        <div className="space-y-3">
+                                            <label className="text-sm font-medium">Model Selection</label>
+                                            <select
+                                                value={settings.activeAiProvider === 'openai' ? settings.openaiModel : settings.geminiModel}
+                                                onChange={(e) => {
+                                                    if (settings.activeAiProvider === 'openai') {
+                                                        settings.setOpenaiModel(e.target.value);
+                                                    } else {
+                                                        settings.setGeminiModel(e.target.value);
+                                                    }
+                                                }}
+                                                className="w-full max-w-xs px-3 py-2 bg-muted border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                            >
+                                                {settings.activeAiProvider === 'openai' ? (
+                                                    <>
+                                                        <option value="gpt-4o">GPT-4o (Premium/Fast)</option>
+                                                        <option value="gpt-4o-mini">GPT-4o-mini (Cost-Efficient)</option>
+                                                        <option value="o1-mini">o1-mini (Reasoning)</option>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <option value="gemini-1.5-pro">Gemini 1.5 Pro (High Context)</option>
+                                                        <option value="gemini-1.5-flash">Gemini 1.5 Flash (Ultra Fast)</option>
+                                                        <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (Next-Gen)</option>
+                                                    </>
+                                                )}
+                                            </select>
+                                        </div>
+
                                         <ApiKeyInput
                                             label="OpenAI API Key"
                                             value={settings.openaiApiKey}
@@ -447,15 +509,17 @@ export default function SettingsPage() {
                                             helperText="Required for intelligent parsing and verification."
                                             getKeyUrl="https://platform.openai.com/api-keys"
                                             onTest={testOpenAIKey}
+                                            required={settings.activeAiProvider === 'openai'}
                                         />
                                         <ApiKeyInput
                                             label="Gemini API Key"
                                             value={settings.geminiApiKey}
                                             onChange={settings.setGeminiApiKey}
-                                            helperText="Optional fallback for Google Gemini models."
+                                            helperText="Optional fallback or primary for Google Gemini models."
                                             placeholder="AIzp..."
                                             getKeyUrl="https://aistudio.google.com/app/apikey"
                                             onTest={testGeminiKey}
+                                            required={settings.activeAiProvider === 'gemini'}
                                         />
                                     </div>
                                 )}

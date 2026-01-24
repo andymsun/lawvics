@@ -2,6 +2,7 @@
 
 import React, { useCallback, useState, useRef, useEffect, useMemo } from 'react';
 import { ComposableMap, Geographies, Geography } from 'react-simple-maps';
+import { X } from 'lucide-react';
 import { useSurveyHistoryStore, useShallow, StatuteEntry } from '@/lib/store';
 import { StateCode } from '@/types/statute';
 
@@ -52,9 +53,9 @@ function useMapColors() {
     return {
         idle: isDark ? '#374151' : '#E5E7EB',      // neutral-700 / neutral-200
         loading: isDark ? '#4B5563' : '#D1D5DB',   // neutral-600 / neutral-300
-        success: '#22C55E',                         // green-500 (Verified)
-        suspicious: '#EAB308',                      // yellow-500 (Suspicious/Unverified)
-        error: '#EF4444',                           // red-500 (Error)
+        success: '#22c55e',                         // green-500 (Vibrant Verified)
+        suspicious: '#ef4444',                      // red-500 (Vibrant Risk)
+        error: '#94a3b8',                           // slate-400 (Distinct Gray Error)
         hover: '#6366F1',                           // indigo-500
         stroke: isDark ? '#1F2937' : '#F9FAFB',    // neutral-800 / neutral-50
     };
@@ -81,7 +82,7 @@ function MapLegend({ colors }: { colors: ReturnType<typeof useMapColors> }) {
             </div>
             <div className="flex items-center gap-1.5">
                 <div className="w-2.5 h-2.5 rounded-sm" style={{ background: colors.suspicious }} />
-                <span>Suspicious</span>
+                <span>Risk</span>
             </div>
             <div className="flex items-center gap-1.5">
                 <div className="w-2.5 h-2.5 rounded-sm" style={{ background: colors.error }} />
@@ -239,6 +240,15 @@ export default function USMap({ onStateClick }: USMapProps) {
                     <div className="text-sm font-medium text-muted-foreground">
                         Progress: <span className="text-primary font-bold">{percentComplete}%</span>
                     </div>
+                    {activeSession?.status === 'running' && (
+                        <button
+                            onClick={() => activeSession && useSurveyHistoryStore.getState().cancelSurvey(activeSession.id)}
+                            className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 text-xs font-semibold rounded-full border border-red-200 dark:border-red-900/50 transition-colors"
+                        >
+                            <X className="w-3.5 h-3.5" />
+                            Cancel Survey
+                        </button>
+                    )}
                 </div>
 
                 {/* Current Query Display */}

@@ -77,8 +77,8 @@ export function InfiniteGridHero({ children, className }: InfiniteGridHeroProps)
     };
 
     useAnimationFrame(() => {
-        gridOffsetX.set((gridOffsetX.get() + 0.3) % gridSize);
-        gridOffsetY.set((gridOffsetY.get() + 0.3) % gridSize);
+        gridOffsetX.set((gridOffsetX.get() + 2.5) % gridSize);
+        gridOffsetY.set((gridOffsetY.get() + 2.5) % gridSize);
     });
 
     // Sharper spotlight gradient

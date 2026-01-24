@@ -22,7 +22,7 @@ function TrustBadge({ trustLevel, message }: { trustLevel: TrustLevel; message: 
         },
         unverified: {
             icon: <AlertTriangle className="w-4 h-4" />,
-            className: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+            className: 'bg-amber-100 text-amber-800 border-amber-200',
             label: 'Unverified',
         },
         suspicious: {
@@ -122,7 +122,7 @@ export default function StatuteCard({ statute, onClose }: StatuteCardProps) {
                         className={`text-sm p-2 rounded ${verification.trustLevel === 'verified'
                             ? 'bg-green-500/10 text-green-600 dark:text-green-400'
                             : verification.trustLevel === 'unverified'
-                                ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400'
+                                ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
                                 : 'bg-red-500/10 text-red-600 dark:text-red-400'
                             }`}
                     >

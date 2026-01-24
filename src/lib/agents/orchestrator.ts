@@ -3,7 +3,7 @@ import { Statute } from '@/types/statute';
 import { useStatuteStore, ALL_STATE_CODES, useSurveyHistoryStore, useSettingsStore, MAX_CONCURRENT_SURVEYS } from '@/lib/store';
 import { useLegalStore } from '@/lib/store';
 import { generateStateQueries } from './translator';
-import { verifyStatute } from './auditor';
+import { verifyStatute, verifyStatuteV2 } from './auditor';
 import { Statute as LegalStatute } from '@/types/legal';
 
 // ============================================================
@@ -100,7 +100,9 @@ async function fetchStatuteFromApi(
     // 2. Real Mode (LLM Scraper or Official API)
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'x-data-source': dataSource
+        'x-data-source': dataSource,
+        'x-active-provider': settings.activeAiProvider,
+        'x-ai-model': settings.activeAiProvider === 'openai' ? settings.openaiModel : settings.geminiModel
     };
 
     // Attach keys based on selected source
@@ -181,12 +183,38 @@ async function fetchStateStatute(
     openaiApiKey: string = ''
 ): Promise<boolean> {
     const surveyStore = useSurveyHistoryStore.getState();
+    const settings = useSettingsStore.getState();
 
     try {
-        // Call our internal API (handles both mock and real modes)
-        const statute = await fetchStatuteFromApi(stateCode, query, useMockMode, openaiApiKey);
+        // 1. Fetch the statute from API or local mock
+        let statute = await fetchStatuteFromApi(stateCode, query, useMockMode, openaiApiKey);
 
-        // Update survey session with successful result
+        // 2. Optional Auto-Verification (Paranoid Mode)
+        if (settings.autoVerify && !useMockMode) {
+            try {
+                const verification = await verifyStatuteV2(
+                    statute,
+                    query,
+                    false, // Real verification
+                    { openai: settings.openaiApiKey, gemini: settings.geminiApiKey },
+                    settings.activeAiProvider,
+                    settings.activeAiProvider === 'openai' ? settings.openaiModel : settings.geminiModel
+                );
+
+                // Update statute with verification results
+                statute = {
+                    ...statute,
+                    trustLevel: verification.trustLevel,
+                    // Optionally update snippet if verification adds more content? 
+                    // For now just trust the metadata.
+                };
+            } catch (vError) {
+                console.warn(`Auto-verification failed for ${stateCode}:`, vError);
+                // We keep the statute but maybe it stays 'unverified'
+            }
+        }
+
+        // 3. Update survey session with successful result
         surveyStore.setSessionStatute(surveyId, stateCode, statute);
         return true;
     } catch (error) {
@@ -291,65 +319,22 @@ export async function searchAllStates(
     let totalErrors = 0;
 
     for (const chunk of chunks) {
+        // Check for cancellation between chunks
+        const currentSurvey = useSurveyHistoryStore.getState().surveys.find(s => s.id === surveyId);
+        if (currentSurvey?.status === 'cancelled') {
+            console.log(`[Orchestrator] Survey #${surveyId} cancelled. Stopping.`);
+            return;
+        }
+
         const [successes, errors] = await processChunk(chunk, queries, surveyId, useMockMode, openaiApiKey);
         totalSuccesses += successes;
         totalErrors += errors;
     }
 
+    // Double check status before final completion (don't override cancellation)
+    const finalSurvey = useSurveyHistoryStore.getState().surveys.find(s => s.id === surveyId);
+    if (finalSurvey?.status === 'cancelled') return;
+
     // 6. Complete the survey and trigger notification
     surveyStore.completeSurvey(surveyId, totalSuccesses, totalErrors);
-}
-
-// ============================================================
-// Legacy Orchestrator (for backward compatibility)
-// ============================================================
-
-const generateMockLegalStatute = (stateCode: string, query: string): LegalStatute => {
-    return {
-        jurisdiction_code: stateCode,
-        official_citation: `${stateCode} Code § ${Math.floor(Math.random() * 1000)}`,
-        statute_text: `This is a simulated result for query "${query}" in ${stateCode}. The law states that...`,
-        effective_date: '2024-01-01',
-        source_link: `https://legislature.${stateCode.toLowerCase()}.gov/statutes`,
-        tags: Math.random() > 0.5 ? ['Limitation: 2 Years'] : ['Limitation: 5 Years', 'Severity: High'],
-        verification_status: {
-            is_link_valid: true,
-            citation_verified_on_page: true,
-            repeal_check_passed: true,
-            last_checked: new Date().toISOString(),
-        },
-    };
-};
-
-const US_STATES = [
-    'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
-    'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
-    'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
-    'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
-    'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
-];
-
-export async function orchestrateSearch(query: string) {
-    const store = useLegalStore.getState();
-
-    store.reset();
-    US_STATES.forEach((state) => store.setLoading(state));
-
-    US_STATES.forEach(async (state) => {
-        const delay = Math.random() * 7000 + 1000;
-        await new Promise((resolve) => setTimeout(resolve, delay));
-
-        if (Math.random() > 0.1) {
-            const mockData = generateMockLegalStatute(state, query);
-            const verification = await verifyStatute(mockData);
-
-            if (verification.success && verification.data) {
-                store.setSuccess(state, verification.data);
-            } else {
-                store.setError(state, verification.error || 'Validation Failed');
-            }
-        } else {
-            store.setError(state, 'Connection Timeout or Source Unavailable');
-        }
-    });
 }

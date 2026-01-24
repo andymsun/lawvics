@@ -70,7 +70,7 @@ export default function DashboardLayout({
                     <div className="flex items-center gap-6">
                         {/* Logo */}
                         <Link href="/" className="flex items-center gap-2">
-                            <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-700 to-slate-500 dark:from-slate-200 dark:to-slate-400">
+                            <span className="text-2xl font-cursive font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#0f172a] to-slate-800 dark:from-slate-100 dark:via-slate-300 dark:to-slate-200">
                                 Lawvics
                             </span>
                             <span className="text-xs bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-muted-foreground border border-border">v1.0</span>
@@ -128,7 +128,13 @@ export default function DashboardLayout({
 
             {/* Main Layout Body */}
             <div className="flex-1 flex overflow-hidden">
-                <DashboardSidebar activeTab={pathname?.includes('settings') ? 'settings' : 'workspace'} />
+                <DashboardSidebar
+                    activeTab={
+                        pathname === '/dashboard/history' ? 'history' :
+                            pathname === '/dashboard/settings' ? 'settings' :
+                                'workspace'
+                    }
+                />
 
                 <main className="flex-1 flex flex-col overflow-hidden relative">
                     {/* Content */}

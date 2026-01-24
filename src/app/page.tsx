@@ -16,16 +16,16 @@ export default function Home() {
         </div>
 
         {/* Title */}
-        <h1 className="text-5xl md:text-7xl lg:text-8xl font-black tracking-tighter">
-          <span className="bg-clip-text text-transparent bg-gradient-to-r from-slate-800 via-slate-600 to-slate-500 dark:from-slate-100 dark:via-slate-300 dark:to-slate-400">
+        <h1 className="text-8xl md:text-9xl font-cursive font-bold tracking-tight mb-8">
+          <span className="bg-clip-text text-transparent bg-gradient-to-r from-[#0f172a] to-slate-800 dark:from-slate-100 dark:via-slate-300 dark:to-slate-100 drop-shadow-md">
             Lawvics
           </span>
         </h1>
 
         {/* Subtitle */}
-        <p className="text-xl md:text-2xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto leading-relaxed">
+        <p className="text-xl md:text-2xl text-[#0f172a]/80 dark:text-slate-300 max-w-2xl mx-auto leading-relaxed">
           The 50-State Survey.{' '}
-          <span className="font-semibold text-slate-800 dark:text-slate-200">
+          <span className="font-bold text-[#0f172a] dark:text-white underline decoration-[#0f172a]/20 dark:decoration-white/20 underline-offset-8">
             Done in 50 Seconds.
           </span>
         </p>
@@ -34,7 +34,7 @@ export default function Home() {
         <div className="pt-4">
           <Link
             href="/dashboard"
-            className="group inline-flex items-center gap-3 px-8 py-4 text-lg font-semibold text-white bg-gradient-to-r from-slate-700 to-slate-600 dark:from-slate-600 dark:to-slate-500 rounded-full shadow-lg shadow-slate-500/20 hover:shadow-slate-500/40 hover:scale-105 transition-all duration-300"
+            className="group inline-flex items-center gap-3 px-8 py-4 text-lg font-semibold text-white bg-gradient-to-r from-[#0f172a] to-slate-800 dark:from-slate-600 dark:to-slate-500 rounded-full shadow-lg shadow-slate-500/20 hover:shadow-slate-500/40 hover:scale-105 transition-all duration-300"
           >
             <span>Launch Console</span>
             <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
@@ -42,7 +42,7 @@ export default function Home() {
         </div>
 
         {/* Stats */}
-        <div className="pt-8 flex items-center justify-center gap-8 text-sm text-slate-500 dark:text-slate-400">
+        <div className="pt-8 flex items-center justify-center gap-8 text-sm text-[#0f172a]/60 dark:text-slate-400">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
             <span>50 Jurisdictions</span>
