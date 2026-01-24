@@ -55,77 +55,49 @@ async function fetchStatuteFromApi(
     useMockMode: boolean,
     openaiApiKey: string = ''
 ): Promise<Statute> {
-    // In mock mode on static hosting, skip API entirely and generate client-side
-    if (useMockMode && typeof window !== 'undefined') {
-        try {
-            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-
-            // Pass the API key in header for BYOK (never log this)
-            if (openaiApiKey && !useMockMode) {
-                headers['x-openai-key'] = openaiApiKey;
-            }
-
-            const response = await fetch('/api/statute/search', {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ stateCode, query, useMockMode }),
-            });
-
-            // If API route doesn't exist (404 on static hosting), fall back to client mock
-            if (response.status === 404) {
-                // Simulate network delay for realistic UX
-                await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 500));
-                return generateClientMockStatute(stateCode, query);
-            }
-
-            if (!response.ok) {
-                throw new Error(`API request failed for ${stateCode}: ${response.statusText}`);
-            }
-
-            const result: SearchApiResponse = await response.json();
-
-            if (!result.success || !result.data) {
-                throw new Error(result.error || `Failed to fetch statute for ${stateCode}`);
-            }
-
-            return result.data;
-        } catch (error) {
-            // Network error or API unavailable - fall back to client mock
-            if (useMockMode) {
-                await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 500));
-                return generateClientMockStatute(stateCode, query);
-            }
-            throw error;
-        }
+    // 1. STRICT CLIENT-SIDE MOCK GUARD
+    // If we are in mock mode, DO NOT attempt to hit the API at all.
+    // This ensures the app works offline or when the backend is down/missing.
+    if (useMockMode) {
+        // Simulate network delay for realistic UX (500-1500ms)
+        await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 500));
+        return generateClientMockStatute(stateCode, query);
     }
 
-    // Non-mock mode: must have API available
+    // 2. Real Mode: Must have API available
+    // We only proceed potential network calls if we are NOT in mock mode
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (openaiApiKey) {
         headers['x-openai-key'] = openaiApiKey;
     }
 
-    const response = await fetch('/api/statute/search', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ stateCode, query, useMockMode }),
-    });
+    try {
+        const response = await fetch('/api/statute/search', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ stateCode, query, useMockMode }),
+        });
 
-    if (response.status === 404) {
-        throw new Error('Real Mode requires a backend server. Please run locally with `npm run dev`.');
+        if (response.status === 404) {
+            throw new Error('Real Mode requires a backend server. Please run locally with `npm run dev`.');
+        }
+
+        if (!response.ok) {
+            throw new Error(`API request failed for ${stateCode}: ${response.statusText}`);
+        }
+
+        const result: SearchApiResponse = await response.json();
+
+        if (!result.success || !result.data) {
+            throw new Error(result.error || `Failed to fetch statute for ${stateCode}`);
+        }
+
+        return result.data;
+    } catch (error) {
+        // If real mode fails, we throw the error so the UI shows it
+        // We do NOT fallback to mock data in Real Mode, as that would be misleading
+        throw error;
     }
-
-    if (!response.ok) {
-        throw new Error(`API request failed for ${stateCode}: ${response.statusText}`);
-    }
-
-    const result: SearchApiResponse = await response.json();
-
-    if (!result.success || !result.data) {
-        throw new Error(result.error || `Failed to fetch statute for ${stateCode}`);
-    }
-
-    return result.data;
 }
 
 // ============================================================
