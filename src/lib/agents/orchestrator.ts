@@ -27,9 +27,27 @@ interface SearchApiResponse {
 }
 
 /**
+ * Generate mock statute data client-side.
+ * Used as fallback when API is unavailable (e.g., on Cloudflare Pages static hosting).
+ */
+function generateClientMockStatute(stateCode: StateCode, query: string): Statute {
+    const limitationYears = Math.random() > 0.5 ? 2 : 5;
+    return {
+        stateCode,
+        citation: `${stateCode} Code § ${Math.floor(Math.random() * 1000)}.${Math.floor(Math.random() * 100)}`,
+        textSnippet: `The limitation period for ${query} in ${stateCode} is ${limitationYears} years from the date of discovery...`,
+        effectiveDate: '2024-01-01',
+        confidenceScore: Math.floor(Math.random() * 20) + 80,
+        sourceUrl: `https://legislature.${stateCode.toLowerCase()}.gov/statutes`,
+    };
+}
+
+/**
  * Fetch statute data from our internal API route.
  * This route handles both mock mode and real scraping.
  * Passes the user's OpenAI API key for BYOK support.
+ * 
+ * HYBRID MODE: Falls back to client-side mock if API is unavailable (static hosting).
  */
 async function fetchStatuteFromApi(
     stateCode: StateCode,
@@ -37,10 +55,53 @@ async function fetchStatuteFromApi(
     useMockMode: boolean,
     openaiApiKey: string = ''
 ): Promise<Statute> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    // In mock mode on static hosting, skip API entirely and generate client-side
+    if (useMockMode && typeof window !== 'undefined') {
+        try {
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
-    // Pass the API key in header for BYOK (never log this)
-    if (openaiApiKey && !useMockMode) {
+            // Pass the API key in header for BYOK (never log this)
+            if (openaiApiKey && !useMockMode) {
+                headers['x-openai-key'] = openaiApiKey;
+            }
+
+            const response = await fetch('/api/statute/search', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ stateCode, query, useMockMode }),
+            });
+
+            // If API route doesn't exist (404 on static hosting), fall back to client mock
+            if (response.status === 404) {
+                // Simulate network delay for realistic UX
+                await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 500));
+                return generateClientMockStatute(stateCode, query);
+            }
+
+            if (!response.ok) {
+                throw new Error(`API request failed for ${stateCode}: ${response.statusText}`);
+            }
+
+            const result: SearchApiResponse = await response.json();
+
+            if (!result.success || !result.data) {
+                throw new Error(result.error || `Failed to fetch statute for ${stateCode}`);
+            }
+
+            return result.data;
+        } catch (error) {
+            // Network error or API unavailable - fall back to client mock
+            if (useMockMode) {
+                await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 500));
+                return generateClientMockStatute(stateCode, query);
+            }
+            throw error;
+        }
+    }
+
+    // Non-mock mode: must have API available
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (openaiApiKey) {
         headers['x-openai-key'] = openaiApiKey;
     }
 
@@ -49,6 +110,10 @@ async function fetchStatuteFromApi(
         headers,
         body: JSON.stringify({ stateCode, query, useMockMode }),
     });
+
+    if (response.status === 404) {
+        throw new Error('Real Mode requires a backend server. Please run locally with `npm run dev`.');
+    }
 
     if (!response.ok) {
         throw new Error(`API request failed for ${stateCode}: ${response.statusText}`);

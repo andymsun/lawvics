@@ -14,14 +14,12 @@
     "@tanstack/react-query": "^5.90.16",
     "ai": "^6.0.30",
     "clsx": "^2.1.1",
-    "crawlee": "^3.15.3",
     "d3-geo": "^3.1.1",
     "d3-scale": "^4.0.2",
     "framer-motion": "^12.26.1",
     "lucide-react": "^0.562.0",
     "next": "16.1.1",
     "next-themes": "^0.4.6",
-    "playwright": "^1.57.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-simple-maps": "^3.0.0",
@@ -31,7 +29,6 @@
     "zustand": "^5.0.10"
   },
   "devDependencies": {
-    "@playwright/test": "^1.57.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

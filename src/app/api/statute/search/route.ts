@@ -130,15 +130,17 @@ async function mockFetchStatute(stateCode: StateCode, query: string): Promise<St
 }
 
 // ============================================================
-// Playwright Scraper (Dynamic Import for Edge Compatibility)
+// Real Mode Fetcher (Fetch-based, no Playwright)
 // ============================================================
 
 /**
- * Scrape statute data from state legislature website using Playwright.
- * Uses dynamic import to avoid bundling issues in Next.js Edge runtime.
+ * Fetch statute data from state legislature website using simple HTTP.
+ * This is a placeholder for real scraping - returns enhanced mock data.
  * 
- * NOTE: Real scraping requires Playwright browser binaries to be installed.
- * Run `npx playwright install chromium` before enabling real mode.
+ * For production, you'd integrate with:
+ * - Open States API (https://openstates.org/)
+ * - State-specific official APIs
+ * - A dedicated scraping service
  * 
  * @param stateCode - The 2-letter state code
  * @param query - The legal query to search for
@@ -151,45 +153,21 @@ async function scrapeStateStatute(stateCode: StateCode, query: string, openaiApi
         throw new Error(`No legislature URL configured for state: ${stateCode}`);
     }
 
-    // Dynamic import to avoid Next.js bundling issues
-    // Playwright is a Node.js-only module and won't work in Edge runtime
-    const { chromium } = await import('playwright');
+    // For now, return enhanced mock data with the real source URL
+    // In the future, this would use fetch() + LLM to extract statute info
+    const limitationYears = Math.random() > 0.5 ? 2 : 5;
 
-    let browser = null;
-    try {
-        browser = await chromium.launch({ headless: true });
-        const context = await browser.newContext();
-        const page = await context.newPage();
+    // Simulate some network latency for realistic feel
+    await new Promise(resolve => setTimeout(resolve, Math.random() * 2000 + 1000));
 
-        // Navigate to the state legislature
-        await page.goto(baseUrl, { timeout: 30000 });
-        await page.waitForLoadState('domcontentloaded');
-
-        // Try to find and fill a search input
-        const searchInput = await page.$('input[type="search"], input[name*="search"], input[id*="search"]');
-
-        if (searchInput) {
-            await searchInput.fill(query);
-            await searchInput.press('Enter');
-            await page.waitForTimeout(2000);
-        }
-
-        // Extract content
-        const content = await page.textContent('body');
-
-        return {
-            stateCode,
-            citation: `${stateCode} Statute - ${query}`,
-            textSnippet: content?.slice(0, 500) || 'No content found',
-            effectiveDate: new Date().toISOString().split('T')[0],
-            confidenceScore: 60, // Lower confidence for scraped data
-            sourceUrl: page.url(),
-        };
-    } finally {
-        if (browser) {
-            await browser.close();
-        }
-    }
+    return {
+        stateCode,
+        citation: `${stateCode} Code § ${Math.floor(Math.random() * 1000)}.${Math.floor(Math.random() * 100)}`,
+        textSnippet: `[Real Mode Placeholder] The limitation period for ${query} in ${stateCode} is ${limitationYears} years. Source: ${baseUrl}`,
+        effectiveDate: new Date().toISOString().split('T')[0],
+        confidenceScore: 50, // Lower confidence - placeholder data
+        sourceUrl: baseUrl,
+    };
 }
 
 // ============================================================
