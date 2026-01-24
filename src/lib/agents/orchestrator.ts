@@ -365,13 +365,8 @@ export class MaxConcurrentSurveysError extends Error {
 /**
  * Search all 50 states for statute data
  *
- * This function:
- * 1. Checks concurrency limit (max 5 running surveys)
- * 2. Retrieves the user's OpenAI API key from settings
- * 3. Translates the user query into 50 state-specific queries
- * 4. Processes states in chunks of CHUNK_SIZE to avoid rate limiting
- * 5. Updates the session-specific statute data as each result comes in
- * 6. Completes the survey and triggers a notification
+ * For LLM-based modes: Makes a SINGLE API call that returns all 50 states at once.
+ * For mock/official-api: Uses chunked individual calls.
  *
  * @param userQuery - Natural language legal query
  * @param surveyId - The ID of the survey session (created by caller)
@@ -386,6 +381,7 @@ export async function searchAllStates(
 ): Promise<void> {
     const surveyStore = useSurveyHistoryStore.getState();
     const settingsStore = useSettingsStore.getState();
+    const { dataSource } = settingsStore;
 
     // 1. Check concurrency limit
     const runningCount = surveyStore.surveys.filter(s => s.status === 'running').length;
@@ -393,21 +389,44 @@ export async function searchAllStates(
         throw new MaxConcurrentSurveysError();
     }
 
-    // 2. Get user's API key for BYOK support
-    const openaiApiKey = settingsStore.openaiApiKey || '';
+    // For LLM-based modes: Use SINGLE API call for all 50 states
+    if (dataSource === 'llm-scraper' || dataSource === 'scraping-proxy') {
+        try {
+            const results = await fetchAllStatesAtOnce(userQuery);
 
-    // 3. Generate state-specific queries
-    const queries = await generateStateQueries(userQuery);
+            let successes = 0;
+            let errors = 0;
 
-    // 4. Split states into chunks
-    const chunks = chunkArray(ALL_STATE_CODES, CHUNK_SIZE);
+            // Distribute results to each state
+            for (const stateCode of ALL_STATE_CODES) {
+                const statute = results[stateCode];
+                if (statute && statute.citation !== 'Unknown') {
+                    surveyStore.setSessionStatute(surveyId, stateCode, statute);
+                    successes++;
+                } else {
+                    surveyStore.setSessionError(surveyId, stateCode, new Error(statute?.textSnippet || 'No result'));
+                    errors++;
+                }
+            }
 
-    // 5. Process each chunk sequentially (chunks in series, states within chunk in parallel)
+            surveyStore.completeSurvey(surveyId, successes, errors);
+        } catch (error) {
+            // Single call failed - mark all states as error
+            const errorObj = error instanceof Error ? error : new Error('API call failed');
+            for (const stateCode of ALL_STATE_CODES) {
+                surveyStore.setSessionError(surveyId, stateCode, errorObj);
+            }
+            surveyStore.completeSurvey(surveyId, 0, 50);
+        }
+        return;
+    }
+
+    // For mock/official-api: Use chunked individual calls (existing behavior)
     let totalSuccesses = 0;
     let totalErrors = 0;
+    const chunks = chunkArray(ALL_STATE_CODES, CHUNK_SIZE);
 
     for (const chunk of chunks) {
-        // Check for cancellation between chunks
         const currentSurvey = useSurveyHistoryStore.getState().surveys.find(s => s.id === surveyId);
         if (currentSurvey?.status === 'cancelled') {
             console.log(`[Orchestrator] Survey #${surveyId} cancelled. Stopping.`);
@@ -418,14 +437,58 @@ export async function searchAllStates(
         totalSuccesses += successes;
         totalErrors += errors;
 
-        // Add delay between chunks to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, INTER_CHUNK_DELAY_MS));
     }
 
-    // Double check status before final completion (don't override cancellation)
     const finalSurvey = useSurveyHistoryStore.getState().surveys.find(s => s.id === surveyId);
     if (finalSurvey?.status === 'cancelled') return;
 
-    // 6. Complete the survey and trigger notification
     surveyStore.completeSurvey(surveyId, totalSuccesses, totalErrors);
+}
+
+// ============================================================
+// Single API Call for All 50 States
+// ============================================================
+
+interface AllStatesApiResponse {
+    success: boolean;
+    data?: Record<string, Statute>;
+    error?: string;
+}
+
+/**
+ * Fetch statute data for ALL 50 states in a SINGLE API call.
+ * Uses the all-states endpoint which makes ONE LLM call.
+ */
+async function fetchAllStatesAtOnce(query: string): Promise<Record<string, Statute>> {
+    const settings = useSettingsStore.getState();
+    const { openaiApiKey, geminiApiKey, activeAiProvider, openaiModel, geminiModel } = settings;
+
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-active-provider': activeAiProvider,
+        'x-ai-model': activeAiProvider === 'openai' ? openaiModel : geminiModel
+    };
+
+    if (openaiApiKey) headers['x-openai-key'] = openaiApiKey;
+    if (geminiApiKey) headers['x-gemini-key'] = geminiApiKey;
+
+    const response = await fetch('/api/statute/all-states', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ query }),
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `API failed: ${response.statusText}`);
+    }
+
+    const result: AllStatesApiResponse = await response.json();
+
+    if (!result.success || !result.data) {
+        throw new Error(result.error || 'API returned no data');
+    }
+
+    return result.data;
 }
