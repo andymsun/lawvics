@@ -304,11 +304,17 @@ export const useLegalStore = create<LegalStore & StoreActions>((set) => ({
 // Settings Store (useSettingsStore)
 // ============================================================
 
+export type DataSource = 'mock' | 'llm-scraper' | 'official-api';
+
 export interface SettingsState {
-    /** Use mock data for fast testing (default: true) */
-    enableMockMode: boolean;
+    /** USource of statute data */
+    dataSource: DataSource;
     /** User's OpenAI API key for BYOK (stored in localStorage) */
     openaiApiKey: string;
+    /** User's Gemini API key for BYOK */
+    geminiApiKey: string;
+    /** User's Open States API key for official data */
+    openStatesApiKey: string;
     /** Enable simultaneous queries across all 50 jurisdictions */
     parallelFetch: boolean;
     /** Automatically run verification checks on returned statutes */
@@ -320,21 +326,27 @@ export interface SettingsState {
 }
 
 interface SettingsActions {
-    /** Toggle mock mode on/off */
-    setEnableMockMode: (enabled: boolean) => void;
-    /** Set the OpenAI API key (BYOK) */
-    setApiKey: (key: string) => void;
+    /** Set the data source */
+    setDataSource: (source: DataSource) => void;
+    /** Set the OpenAI API key */
+    setOpenaiApiKey: (key: string) => void;
+    /** Set the Gemini API key */
+    setGeminiApiKey: (key: string) => void;
+    /** Set the Open States API key */
+    setOpenStatesApiKey: (key: string) => void;
     /** Update any boolean setting */
-    setSetting: <K extends keyof Omit<SettingsState, 'openaiApiKey'>>(key: K, value: SettingsState[K]) => void;
+    setSetting: <K extends keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openStatesApiKey'>>(key: K, value: SettingsState[K]) => void;
     /** Toggle a boolean setting */
-    toggleSetting: (key: keyof Omit<SettingsState, 'openaiApiKey'>) => void;
+    toggleSetting: (key: keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openStatesApiKey'>) => void;
 }
 
 export type SettingsStore = SettingsState & SettingsActions;
 
 const DEFAULT_SETTINGS: SettingsState = {
-    enableMockMode: true,
+    dataSource: 'mock',
     openaiApiKey: '',
+    geminiApiKey: '',
+    openStatesApiKey: '',
     parallelFetch: true,
     autoVerify: true,
     showConfidence: true,
@@ -351,6 +363,7 @@ function loadPersistedSettings(): SettingsState {
     try {
         const stored = localStorage.getItem('lawvics-settings');
         if (stored) {
+            // Merge stored settings with defaults to handle new fields
             return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
         }
     } catch {
@@ -365,7 +378,18 @@ function loadPersistedSettings(): SettingsState {
 function persistSettings(settings: SettingsState): void {
     if (typeof window === 'undefined') return;
     try {
-        localStorage.setItem('lawvics-settings', JSON.stringify(settings));
+        // Only persist state, not actions
+        const stateToPersist: Partial<SettingsState> = {
+            dataSource: settings.dataSource,
+            openaiApiKey: settings.openaiApiKey,
+            geminiApiKey: settings.geminiApiKey,
+            openStatesApiKey: settings.openStatesApiKey,
+            parallelFetch: settings.parallelFetch,
+            autoVerify: settings.autoVerify,
+            showConfidence: settings.showConfidence,
+            cacheResults: settings.cacheResults,
+        };
+        localStorage.setItem('lawvics-settings', JSON.stringify(stateToPersist));
     } catch {
         // Ignore localStorage errors
     }
@@ -374,13 +398,23 @@ function persistSettings(settings: SettingsState): void {
 export const useSettingsStore = create<SettingsStore>((set, get) => ({
     ...loadPersistedSettings(),
 
-    setEnableMockMode: (enabled) => {
-        set({ enableMockMode: enabled });
+    setDataSource: (source) => {
+        set({ dataSource: source });
         persistSettings(get());
     },
 
-    setApiKey: (key) => {
+    setOpenaiApiKey: (key) => {
         set({ openaiApiKey: key });
+        persistSettings(get());
+    },
+
+    setGeminiApiKey: (key) => {
+        set({ geminiApiKey: key });
+        persistSettings(get());
+    },
+
+    setOpenStatesApiKey: (key) => {
+        set({ openStatesApiKey: key });
         persistSettings(get());
     },
 

@@ -2,8 +2,8 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Settings, Zap, AlertTriangle, Key, Eye, EyeOff } from 'lucide-react';
-import { useSettingsStore } from '@/lib/store';
+import { X, Settings, Zap, AlertTriangle, Key, Eye, EyeOff, Database, Bot, Globe } from 'lucide-react';
+import { useSettingsStore, DataSource } from '@/lib/store';
 
 // ============================================================
 // Premium Toggle Switch Component
@@ -104,11 +104,15 @@ const PremiumToggle = ({
 // ============================================================
 
 interface ApiKeyInputProps {
+    label: string;
     value: string;
     onChange: (key: string) => void;
+    placeholder?: string;
+    helperText?: string;
+    required?: boolean;
 }
 
-const ApiKeyInput = ({ value, onChange }: ApiKeyInputProps) => {
+const ApiKeyInput = ({ label, value, onChange, placeholder = "sk-...", helperText, required = false }: ApiKeyInputProps) => {
     const [showKey, setShowKey] = React.useState(false);
     const hasKey = value.length > 0;
 
@@ -121,11 +125,13 @@ const ApiKeyInput = ({ value, onChange }: ApiKeyInputProps) => {
                 <div className="flex-1 space-y-3">
                     <div>
                         <div className="text-foreground font-medium text-lg tracking-wide">
-                            OpenAI API Key
+                            {label}
                         </div>
-                        <div className="text-muted-foreground text-sm leading-relaxed mt-1">
-                            Required for LLM-based statute verification in Real Mode.
-                        </div>
+                        {helperText && (
+                            <div className="text-muted-foreground text-sm leading-relaxed mt-1">
+                                {helperText}
+                            </div>
+                        )}
                     </div>
 
                     {/* Input with visibility toggle */}
@@ -134,7 +140,7 @@ const ApiKeyInput = ({ value, onChange }: ApiKeyInputProps) => {
                             type={showKey ? 'text' : 'password'}
                             value={value}
                             onChange={(e) => onChange(e.target.value)}
-                            placeholder="sk-..."
+                            placeholder={placeholder}
                             className="w-full px-4 py-3 pr-12 bg-muted border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all font-mono text-sm"
                         />
                         <button
@@ -146,11 +152,11 @@ const ApiKeyInput = ({ value, onChange }: ApiKeyInputProps) => {
                         </button>
                     </div>
 
-                    {/* Warning if empty */}
-                    {!hasKey && (
+                    {/* Warning if empty & required */}
+                    {required && !hasKey && (
                         <div className="flex items-center gap-2 text-amber-500 text-sm">
                             <AlertTriangle className="w-4 h-4" />
-                            <span>Real Mode requires a valid OpenAI API Key.</span>
+                            <span>{label} is required for this mode.</span>
                         </div>
                     )}
 
@@ -159,6 +165,75 @@ const ApiKeyInput = ({ value, onChange }: ApiKeyInputProps) => {
                         Your key is stored locally in your browser and only used for verification.
                     </div>
                 </div>
+            </div>
+        </div>
+    );
+};
+
+// ============================================================
+// Data Source Selector
+// ============================================================
+
+interface DataSourceOption {
+    id: DataSource;
+    icon: React.ElementType;
+    label: string;
+    description: string;
+}
+
+const DataSourceSelector = () => {
+    const { dataSource, setDataSource } = useSettingsStore();
+
+    const sources: DataSourceOption[] = [
+        {
+            id: 'mock',
+            icon: Zap,
+            label: 'Mock Data',
+            description: 'Instant, free, simulated data. Best for testing UI flows.'
+        },
+        {
+            id: 'llm-scraper',
+            icon: Bot,
+            label: 'AI Scraper',
+            description: 'Deep search using LLMs + Web Browsing. Slow but thorough.'
+        },
+        {
+            id: 'official-api',
+            icon: Globe,
+            label: 'Open States API',
+            description: 'Official legislative data. Fast and accurate.'
+        }
+    ];
+
+    return (
+        <div className="space-y-4">
+            <label className="text-foreground font-medium text-lg tracking-wide flex items-center gap-2">
+                <Database className="w-5 h-5 text-primary" />
+                Data Source
+            </label>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {sources.map((source) => (
+                    <div
+                        key={source.id}
+                        onClick={() => setDataSource(source.id)}
+                        className={`
+                            cursor-pointer p-4 rounded-xl border-2 transition-all duration-200
+                            flex flex-col gap-3
+                            ${dataSource === source.id
+                                ? 'border-primary bg-primary/5 shadow-lg scale-[1.02]'
+                                : 'border-border bg-card hover:border-muted-foreground/50 hover:bg-muted/30'
+                            }
+                        `}
+                    >
+                        <div className={`p-2 w-fit rounded-lg ${dataSource === source.id ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                            <source.icon className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <div className="font-semibold text-foreground">{source.label}</div>
+                            <div className="text-xs text-muted-foreground mt-1 leading-snug">{source.description}</div>
+                        </div>
+                    </div>
+                ))}
             </div>
         </div>
     );
@@ -206,7 +281,7 @@ interface SettingsModalProps {
 }
 
 interface SettingOption {
-    id: 'enableMockMode' | 'parallelFetch' | 'autoVerify' | 'showConfidence' | 'cacheResults';
+    id: 'parallelFetch' | 'autoVerify' | 'showConfidence' | 'cacheResults';
     label: string;
     description: string;
     warning?: string;
@@ -216,13 +291,6 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     const settings = useSettingsStore();
 
     const options: SettingOption[] = [
-        {
-            id: 'enableMockMode',
-            label: 'Mock Data Mode',
-            description:
-                'Use simulated data for fast testing (~1-2 seconds per survey). Disable for real web scraping.',
-            warning: 'Real mode is significantly slower (30+ seconds) and requires API keys.',
-        },
         {
             id: 'parallelFetch',
             label: 'Parallel Fetching',
@@ -311,6 +379,53 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                 </p>
 
                                 <div className="space-y-8">
+                                    {/* Data Source Selector */}
+                                    <DataSourceSelector />
+
+                                    {/* API Keys based on Data Source */}
+                                    <AnimatePresence mode='wait'>
+                                        {settings.dataSource === 'llm-scraper' && (
+                                            <motion.div
+                                                initial={{ opacity: 0, height: 0 }}
+                                                animate={{ opacity: 1, height: 'auto' }}
+                                                exit={{ opacity: 0, height: 0 }}
+                                                className="space-y-4"
+                                            >
+                                                <ApiKeyInput
+                                                    label="OpenAI API Key"
+                                                    value={settings.openaiApiKey}
+                                                    onChange={settings.setOpenaiApiKey}
+                                                    helperText="Required for OpenAI models."
+                                                />
+                                                <ApiKeyInput
+                                                    label="Gemini API Key"
+                                                    value={settings.geminiApiKey}
+                                                    onChange={settings.setGeminiApiKey}
+                                                    helperText="Required for Google Gemini models."
+                                                    placeholder="AIzp..."
+                                                />
+                                            </motion.div>
+                                        )}
+                                        {settings.dataSource === 'official-api' && (
+                                            <motion.div
+                                                initial={{ opacity: 0, height: 0 }}
+                                                animate={{ opacity: 1, height: 'auto' }}
+                                                exit={{ opacity: 0, height: 0 }}
+                                            >
+                                                <ApiKeyInput
+                                                    label="Open States API Key"
+                                                    value={settings.openStatesApiKey}
+                                                    onChange={settings.setOpenStatesApiKey}
+                                                    helperText="Get a free key at openstates.org"
+                                                    required={true}
+                                                />
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+
+                                    <div className="border-t border-border my-6"></div>
+
+                                    {/* Other Settings */}
                                     {options.map((option, index) => (
                                         <motion.div
                                             key={option.id}
@@ -332,23 +447,6 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                             />
                                         </motion.div>
                                     ))}
-
-                                    {/* API Key Section - Only visible when Mock Mode is OFF */}
-                                    <AnimatePresence>
-                                        {!settings.enableMockMode && (
-                                            <motion.div
-                                                initial={{ opacity: 0, height: 0 }}
-                                                animate={{ opacity: 1, height: 'auto' }}
-                                                exit={{ opacity: 0, height: 0 }}
-                                                transition={{ duration: 0.3 }}
-                                            >
-                                                <ApiKeyInput
-                                                    value={settings.openaiApiKey}
-                                                    onChange={(key) => settings.setApiKey(key)}
-                                                />
-                                            </motion.div>
-                                        )}
-                                    </AnimatePresence>
                                 </div>
                             </div>
 
@@ -356,17 +454,10 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             <div className="flex-shrink-0 p-6 border-t border-border bg-muted/30">
                                 <div className="flex justify-between items-center">
                                     <div className="text-sm text-muted-foreground">
-                                        {settings.enableMockMode ? (
-                                            <span className="flex items-center gap-2">
-                                                <span className="w-2 h-2 rounded-full bg-green-500" />
-                                                Mock Mode Active
-                                            </span>
-                                        ) : (
-                                            <span className="flex items-center gap-2 text-amber-500">
-                                                <span className="w-2 h-2 rounded-full bg-amber-500" />
-                                                Real Mode (Slower)
-                                            </span>
-                                        )}
+                                        <span className="flex items-center gap-2">
+                                            <span className={`w-2 h-2 rounded-full ${settings.dataSource === 'mock' ? 'bg-green-500' : 'bg-amber-500'}`} />
+                                            Active Source: <span className="font-semibold uppercase">{settings.dataSource.replace('-', ' ')}</span>
+                                        </span>
                                     </div>
                                     <motion.button
                                         whileHover={{ scale: 1.02 }}

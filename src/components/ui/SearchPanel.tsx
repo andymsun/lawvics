@@ -10,7 +10,7 @@ export default function SearchPanel() {
     const [error, setError] = useState<string | null>(null);
     const runningCount = useSurveyHistoryStore(getRunningCount);
     const startSurvey = useSurveyHistoryStore((state) => state.startSurvey);
-    const enableMockMode = useSettingsStore((state) => state.enableMockMode);
+    const dataSource = useSettingsStore((state) => state.dataSource);
 
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -27,8 +27,8 @@ export default function SearchPanel() {
         const surveyId = startSurvey(query);
 
         // Fire and forget - results stream into the session
-        // Pass enableMockMode from settings store
-        searchAllStates(query, surveyId, enableMockMode).catch((err) => {
+        // Pass derived mock mode boolean
+        searchAllStates(query, surveyId, dataSource === 'mock').catch((err) => {
             if (err instanceof MaxConcurrentSurveysError) {
                 setError(err.message);
             } else {

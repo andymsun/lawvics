@@ -181,19 +181,94 @@ async function scrapeStateStatute(stateCode: StateCode, query: string, openaiApi
  * @param query - The legal query to search for
  * @param openaiApiKey - User's OpenAI API key for BYOK (used for LLM verification)
  */
-async function fetchStatute(stateCode: StateCode, query: string, openaiApiKey: string): Promise<Statute> {
-    // 1. Check if there's an official API fetcher for this state
-    const apiFetcher = STATE_API_FETCHERS[stateCode];
-    if (apiFetcher) {
+// ============================================================
+// Open States API Client
+// ============================================================
+
+const STATE_NAMES: Record<StateCode, string> = {
+    AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California",
+    CO: "Colorado", CT: "Connecticut", DE: "Delaware", FL: "Florida", GA: "Georgia",
+    HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa",
+    KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland",
+    MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi", MO: "Missouri",
+    MT: "Montana", NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "Newsey",
+    NM: "New Mexico", NY: "New York", NC: "North Carolina", ND: "North Dakota", OH: "Ohio",
+    OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina",
+    SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont",
+    VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming"
+};
+
+async function fetchOpenStates(stateCode: StateCode, query: string, apiKey: string): Promise<Statute> {
+    const stateName = STATE_NAMES[stateCode]; // Open States uses full names for jurisdictions often
+
+    // Using the bills endpoint (simplified)
+    const url = `https://v3.openstates.org/bills?jurisdiction=${encodeURIComponent(stateName)}&q=${encodeURIComponent(query)}&sort=updated_desc&per_page=1&apikey=${apiKey}`;
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+            throw new Error('Invalid Open States API Key');
+        }
+        throw new Error(`Open States API error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const bill = data.results?.[0];
+
+    if (!bill) {
+        throw new Error(`No statutes found for "${query}" in ${stateName}`);
+    }
+
+    return {
+        stateCode,
+        citation: bill.identifier || 'Unknown Citation',
+        textSnippet: bill.title || 'No text available',
+        effectiveDate: bill.updated_at || new Date().toISOString(),
+        confidenceScore: 95, // High confidence for official data
+        sourceUrl: bill.openstates_url || `https://openstates.org/${stateCode.toLowerCase()}/bills`,
+    };
+}
+
+// ============================================================
+// Main Fetcher with Fallback Chain
+// ============================================================
+
+/**
+ * Fetch statute data using the configured data source.
+ */
+async function fetchStatute(
+    stateCode: StateCode,
+    query: string,
+    dataSource: string,
+    keys: { openai?: string; gemini?: string; openStates?: string }
+): Promise<Statute> {
+
+    // 1. Official API (Open States)
+    if (dataSource === 'official-api') {
+        if (!keys.openStates) {
+            throw new Error('Open States API Key is required for this mode.');
+        }
         try {
-            return await apiFetcher(stateCode, query);
-        } catch (apiError) {
-            console.warn(`API fetcher failed for ${stateCode}, falling back to scraper:`, apiError);
+            return await fetchOpenStates(stateCode, query, keys.openStates);
+        } catch (error) {
+            console.warn(`Open States fetch failed for ${stateCode}:`, error);
+            throw error; // Propagate error for UI
         }
     }
 
-    // 2. Fall back to Playwright scraping (openaiApiKey available for future LLM extraction)
-    return await scrapeStateStatute(stateCode, query, openaiApiKey);
+    // 2. LLM Scraper (Placeholder / Fetch-based fallback)
+    if (dataSource === 'llm-scraper') {
+        const apiKey = keys.openai || keys.gemini;
+        if (!apiKey) {
+            throw new Error('OpenAI or Gemini API Key is required for AI Scraper mode.');
+        }
+        // Use existing scraper logic (modified to accept generic key)
+        return await scrapeStateStatute(stateCode, query, apiKey as string);
+    }
+
+    // 3. Fallback / Mock
+    return await mockFetchStatute(stateCode, query);
 }
 
 // ============================================================
@@ -201,19 +276,16 @@ async function fetchStatute(stateCode: StateCode, query: string, openaiApiKey: s
 // ============================================================
 
 /**
- * Validates an OpenAI API key format.
- * Returns true if the key appears to be valid (starts with 'sk-' and has reasonable length).
- * NOTE: This is a format check only; actual validity is verified when the key is used.
+ * Validates an OpenAI/Gemini API key format.
  */
 function isValidApiKeyFormat(apiKey: string): boolean {
-    // OpenAI keys start with 'sk-' and are typically 40+ characters
-    return apiKey.startsWith('sk-') && apiKey.length >= 20;
+    return apiKey.length >= 20; // Simplified check
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<SearchResponse>> {
     try {
         const body: SearchRequest = await request.json();
-        const { stateCode, query, useMockMode } = body;
+        const { stateCode, query } = body;
 
         // Validate required fields
         if (!stateCode || !query) {
@@ -223,42 +295,24 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
             );
         }
 
-        // Extract OpenAI API key from header (BYOK support)
-        // SECURITY: Never log this value
-        const openaiApiKey = request.headers.get('x-openai-key') || '';
-
-        // Real mode requires a valid API key
-        if (!useMockMode) {
-            if (!openaiApiKey) {
-                return NextResponse.json(
-                    {
-                        success: false,
-                        error: 'Real Mode requires an OpenAI API Key. Please add your key in Settings.',
-                    },
-                    { status: 401 }
-                );
-            }
-
-            if (!isValidApiKeyFormat(openaiApiKey)) {
-                return NextResponse.json(
-                    {
-                        success: false,
-                        error: 'Invalid OpenAI API Key format. Keys should start with "sk-".',
-                    },
-                    { status: 401 }
-                );
-            }
-        }
+        // Extract headers
+        const dataSource = request.headers.get('x-data-source') || 'mock';
+        const openaiApiKey = request.headers.get('x-openai-key') || undefined;
+        const geminiApiKey = request.headers.get('x-gemini-key') || undefined;
+        const openStatesApiKey = request.headers.get('x-openstates-key') || undefined;
+        const useMockMode = dataSource === 'mock';
 
         let statute: Statute;
 
         if (useMockMode) {
-            // Mock mode: Return fake data immediately
             statute = await mockFetchStatute(stateCode, query);
         } else {
-            // Real mode: Use API or scraper with user's API key
-            // The openaiApiKey is passed for future OpenAI SDK initialization
-            statute = await fetchStatute(stateCode, query, openaiApiKey);
+            // Real mode with data source switching
+            statute = await fetchStatute(stateCode, query, dataSource, {
+                openai: openaiApiKey,
+                gemini: geminiApiKey,
+                openStates: openStatesApiKey
+            });
         }
 
         return NextResponse.json({

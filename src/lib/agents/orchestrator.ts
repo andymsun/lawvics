@@ -44,38 +44,52 @@ function generateClientMockStatute(stateCode: StateCode, query: string): Statute
 
 /**
  * Fetch statute data from our internal API route.
- * This route handles both mock mode and real scraping.
- * Passes the user's OpenAI API key for BYOK support.
+ * This route handles mock mode, LLM scraping, and official API calls.
+ * Passes the user's API keys for BYOK support.
  * 
  * HYBRID MODE: Falls back to client-side mock if API is unavailable (static hosting).
  */
 async function fetchStatuteFromApi(
     stateCode: StateCode,
     query: string,
-    useMockMode: boolean,
-    openaiApiKey: string = ''
+    useMockMode: boolean, // Deprecated argument, kept for signature compatibility but ignored in favor of store
+    openaiApiKey: string = '' // Deprecated argument
 ): Promise<Statute> {
+    const settings = useSettingsStore.getState();
+    const { dataSource, openaiApiKey: storeOpenAiKey, geminiApiKey, openStatesApiKey } = settings;
+
     // 1. STRICT CLIENT-SIDE MOCK GUARD
     // If we are in mock mode, DO NOT attempt to hit the API at all.
-    // This ensures the app works offline or when the backend is down/missing.
-    if (useMockMode) {
+    if (dataSource === 'mock') {
         // Simulate network delay for realistic UX (500-1500ms)
         await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 500));
         return generateClientMockStatute(stateCode, query);
     }
 
-    // 2. Real Mode: Must have API available
-    // We only proceed potential network calls if we are NOT in mock mode
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (openaiApiKey) {
-        headers['x-openai-key'] = openaiApiKey;
+    // 2. Real Mode (LLM Scraper or Official API)
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-data-source': dataSource
+    };
+
+    // Attach keys based on selected source
+    if (dataSource === 'llm-scraper') {
+        if (storeOpenAiKey) headers['x-openai-key'] = storeOpenAiKey;
+        if (geminiApiKey) headers['x-gemini-key'] = geminiApiKey;
+    } else if (dataSource === 'official-api') {
+        if (openStatesApiKey) headers['x-openstates-key'] = openStatesApiKey;
     }
 
     try {
         const response = await fetch('/api/statute/search', {
             method: 'POST',
             headers,
-            body: JSON.stringify({ stateCode, query, useMockMode }),
+            body: JSON.stringify({
+                stateCode,
+                query,
+                dataSource, // Explicitly pass source in body too for ease of access
+                useMockMode: false
+            }),
         });
 
         if (response.status === 404) {
@@ -83,7 +97,8 @@ async function fetchStatuteFromApi(
         }
 
         if (!response.ok) {
-            throw new Error(`API request failed for ${stateCode}: ${response.statusText}`);
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `API request failed for ${stateCode}: ${response.statusText}`);
         }
 
         const result: SearchApiResponse = await response.json();
@@ -94,8 +109,6 @@ async function fetchStatuteFromApi(
 
         return result.data;
     } catch (error) {
-        // If real mode fails, we throw the error so the UI shows it
-        // We do NOT fallback to mock data in Real Mode, as that would be misleading
         throw error;
     }
 }
