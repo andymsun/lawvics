@@ -370,8 +370,7 @@ interface SettingsActions {
     setGeminiApiKey: (key: string) => void;
     /** Set the Open States API key */
     setOpenStatesApiKey: (key: string) => void;
-    /** Set the Open States API key */
-    setOpenStatesApiKey: (key: string) => void;
+
     /** Set the LegiScan API key */
     setLegiscanApiKey: (key: string) => void;
     /** Set the Scraping Service API key */
