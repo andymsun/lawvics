@@ -2,15 +2,17 @@
 
 import { useState } from "react";
 import { searchAllStates, MaxConcurrentSurveysError } from "@/lib/agents/orchestrator";
+import { runQuotaCheck } from "@/lib/agents/quota-guard";
 import { useSurveyHistoryStore, useSettingsStore, getRunningCount, MAX_CONCURRENT_SURVEYS } from "@/lib/store";
-import { Search, AlertCircle } from "lucide-react";
+import { Search, AlertCircle, Loader2 } from "lucide-react";
 
 export default function SearchPanel() {
     const [query, setQuery] = useState("");
     const [error, setError] = useState<string | null>(null);
+    const [isChecking, setIsChecking] = useState(false);
     const runningCount = useSurveyHistoryStore(getRunningCount);
     const startSurvey = useSurveyHistoryStore((state) => state.startSurvey);
-    const dataSource = useSettingsStore((state) => state.dataSource);
+    const settings = useSettingsStore();
 
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -23,12 +25,34 @@ export default function SearchPanel() {
             return;
         }
 
+        // Pre-flight quota check for non-mock modes
+        if (settings.dataSource !== 'mock') {
+            setIsChecking(true);
+            try {
+                const quotaResult = await runQuotaCheck(
+                    settings.activeAiProvider,
+                    settings.openaiApiKey,
+                    settings.geminiApiKey
+                );
+
+                if (!quotaResult.ok) {
+                    setError(quotaResult.message);
+                    setIsChecking(false);
+                    return;
+                }
+            } catch (err) {
+                console.error('Quota check failed:', err);
+                // Continue anyway if check itself fails (network issue, etc.)
+            }
+            setIsChecking(false);
+        }
+
         // Create the session first (returns ID)
         const surveyId = startSurvey(query);
 
         // Fire and forget - results stream into the session
         // Pass derived mock mode boolean
-        searchAllStates(query, surveyId, dataSource === 'mock').catch((err) => {
+        searchAllStates(query, surveyId, settings.dataSource === 'mock').catch((err) => {
             if (err instanceof MaxConcurrentSurveysError) {
                 setError(err.message);
             } else {
@@ -52,10 +76,10 @@ export default function SearchPanel() {
                 />
                 <button
                     type="submit"
-                    disabled={runningCount >= MAX_CONCURRENT_SURVEYS}
+                    disabled={runningCount >= MAX_CONCURRENT_SURVEYS || isChecking}
                     className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-primary text-primary-foreground rounded-full hover:bg-primary/90 disabled:opacity-50 transition-colors"
                 >
-                    <Search size={24} />
+                    {isChecking ? <Loader2 size={24} className="animate-spin" /> : <Search size={24} />}
                 </button>
             </form>
 
