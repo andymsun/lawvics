@@ -2,9 +2,49 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Globe, Bot, Zap, ExternalLink, Code2, Bookmark, BookmarkCheck, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Globe, Bot, Zap, ExternalLink, Code2, Bookmark, BookmarkCheck, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { useSurveyHistoryStore, useSettingsStore, useShallow, getActiveSessionStatutes, useSavedStatuteStore } from '@/lib/store';
+import { StateCode } from '@/types/statute';
 import StatuteCard from '@/components/ui/StatuteCard';
+
+/**
+ * RetryButton component for "Did you mean?" suggestions
+ * Handles loading state and proper async fetch
+ */
+function RetryButton({ suggestion, stateCode, surveyId }: { suggestion: string; stateCode: StateCode; surveyId: number }) {
+    const [isLoading, setIsLoading] = useState(false);
+
+    const handleRetry = async () => {
+        setIsLoading(true);
+        try {
+            const { fetchStateStatute } = await import('@/lib/agents/orchestrator');
+            await fetchStateStatute(stateCode, suggestion, surveyId);
+        } catch (error) {
+            console.error('Retry failed:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <button
+            onClick={handleRetry}
+            disabled={isLoading}
+            className="w-full text-left flex items-center justify-between px-3 py-2 bg-background/50 hover:bg-primary/5 border border-transparent hover:border-primary/20 rounded-md text-sm transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+            <span className="text-foreground group-hover:text-primary transition-colors">
+                {suggestion}
+            </span>
+            {isLoading ? (
+                <Loader2 className="w-4 h-4 text-primary animate-spin" />
+            ) : (
+                <span className="text-xs text-muted-foreground group-hover:text-primary/70">
+                    Retry
+                </span>
+            )}
+        </button>
+    );
+}
 
 export default function StatuteDetailPanel() {
     const activeStateCode = useSurveyHistoryStore((state) => state.activeStateCode);
@@ -139,8 +179,28 @@ export default function StatuteDetailPanel() {
                                     <div className="p-4 bg-slate-500/10 border border-slate-500/20 rounded-lg text-slate-600 dark:text-slate-400">
                                         <h3 className="font-semibold mb-1">System Error</h3>
                                         <p className="text-sm">{(selectedStatuteEntry as Error).message}</p>
+
+                                        {/* Suggestions Section */}
+                                        {(selectedStatuteEntry as any).suggestions && (selectedStatuteEntry as any).suggestions.length > 0 && (
+                                            <div className="mt-4 pt-4 border-t border-slate-500/20">
+                                                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                                                    Did you mean?
+                                                </p>
+                                                <div className="space-y-2">
+                                                    {((selectedStatuteEntry as any).suggestions as string[]).map((suggestion, idx) => (
+                                                        <RetryButton
+                                                            key={idx}
+                                                            suggestion={suggestion}
+                                                            stateCode={activeStateCode!}
+                                                            surveyId={activeSurveyId!}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 ) : statute ? (
+
                                     <>
                                         <StatuteCard statute={statute} onClose={handleClose} />
 

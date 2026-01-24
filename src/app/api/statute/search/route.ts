@@ -5,6 +5,7 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { generateObject } from 'ai';
 import { z } from 'zod';
 import * as cheerio from 'cheerio';
+import { PlaywrightCrawler } from 'crawlee';
 
 // ============================================================
 // Types
@@ -111,6 +112,27 @@ const ScraperSchema = z.object({
     confidence: z.number().min(0).max(100).describe('Confidence score from 0-100'),
 });
 
+/**
+ * Use Crawlee + Playwright to fetch page content (handles JS rendering)
+ */
+async function fetchPageContent(url: string): Promise<string> {
+    let content = '';
+
+    const crawler = new PlaywrightCrawler({
+        // Headless is default
+        // Use a unique persistence key or in-memory to avoid conflicts
+        requestHandler: async ({ page }) => {
+            // Wait for body to be visible
+            await page.waitForSelector('body');
+            content = await page.content();
+        },
+        maxRequestsPerCrawl: 1,
+    });
+
+    await crawler.run([url]);
+    return content;
+}
+
 async function scrapeStateStatute(
     stateCode: StateCode,
     query: string,
@@ -122,13 +144,14 @@ async function scrapeStateStatute(
     if (!baseUrl) throw new Error(`No URL for ${stateCode}`);
 
     try {
-        // 1. Fetch the page content
-        const res = await fetch(baseUrl, { next: { revalidate: 3600 } });
-        const html = await res.text();
+        // 1. Fetch the page content using Crawlee (replaces simple fetch)
+        console.log(`[Crawlee] Visiting ${baseUrl} for ${stateCode}...`);
+        const html = await fetchPageContent(baseUrl);
+
         const $ = cheerio.load(html);
 
         // 2. Clean text (remove scripts, styles, etc.)
-        $('script, style, nav, footer').remove();
+        $('script, style, nav, footer, iframe, noscript').remove();
         const cleanText = $('body').text().replace(/\s+/g, ' ').substring(0, 15000);
 
         // 3. LLM Extraction
@@ -157,6 +180,7 @@ async function scrapeStateStatute(
         throw new Error(`Failed to scrape ${stateCode} legislature: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 }
+
 
 // ============================================================
 // Open States Client

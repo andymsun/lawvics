@@ -4,6 +4,7 @@ import { useStatuteStore, ALL_STATE_CODES, useSurveyHistoryStore, useSettingsSto
 import { useLegalStore } from '@/lib/store';
 import { generateStateQueries } from './translator';
 import { verifyStatute, verifyStatuteV2 } from './auditor';
+import { generateStatuteSuggestions, StatuteErrorWithSuggestions } from './suggester';
 import { Statute as LegalStatute } from '@/types/legal';
 
 // ============================================================
@@ -37,6 +38,11 @@ interface SearchApiResponse {
 async function mockFetchStatute(stateCode: StateCode, query: string): Promise<Statute> {
     // 1. Random Latency (800ms - 2500ms)
     await new Promise(resolve => setTimeout(resolve, Math.random() * 1700 + 800));
+
+    // FORCE ERROR FOR TESTING
+    if (stateCode === 'NY') {
+        throw new Error('Forced error for testing suggestions');
+    }
 
     const rand = Math.random();
 
@@ -175,7 +181,7 @@ function chunkArray<T>(array: readonly T[], size: number): T[][] {
  * @param useMockMode - Whether to use mock data (true) or real scraping (false)
  * @param openaiApiKey - User's OpenAI API key for BYOK support
  */
-async function fetchStateStatute(
+export async function fetchStateStatute(
     stateCode: StateCode,
     query: string,
     surveyId: number,
@@ -218,11 +224,17 @@ async function fetchStateStatute(
         surveyStore.setSessionStatute(surveyId, stateCode, statute);
         return true;
     } catch (error) {
+        // Generate suggestions for the error context
+        const errorMessage = error instanceof Error ? error.message : String(error);
+
+        const suggestions = await generateStatuteSuggestions(query, stateCode, errorMessage);
+        const enhancedError = new StatuteErrorWithSuggestions(errorMessage, suggestions);
+
         // Update survey session with error
         surveyStore.setSessionError(
             surveyId,
             stateCode,
-            error instanceof Error ? error : new Error(String(error))
+            enhancedError
         );
         return false;
     }
