@@ -39,12 +39,8 @@ async function mockFetchStatute(stateCode: StateCode, query: string): Promise<St
     // 1. Random Latency (800ms - 2500ms)
     await new Promise(resolve => setTimeout(resolve, Math.random() * 1700 + 800));
 
-    // FORCE ERROR FOR TESTING
-    if (stateCode === 'NY') {
-        throw new Error('Forced error for testing suggestions');
-    }
-
     const rand = Math.random();
+
 
     // 2. Random Failures (20% chance)
     if (rand < 0.20) {
