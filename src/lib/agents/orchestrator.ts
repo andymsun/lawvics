@@ -30,7 +30,39 @@ interface SearchApiResponse {
  * Generate mock statute data client-side.
  * Used as fallback when API is unavailable (e.g., on Cloudflare Pages static hosting).
  */
-function generateClientMockStatute(stateCode: StateCode, query: string): Statute {
+/**
+ * Generate mock statute data client-side with CHAOS simulation.
+ * Used as fallback when API is unavailable (e.g., on Cloudflare Pages static hosting).
+ */
+async function mockFetchStatute(stateCode: StateCode, query: string): Promise<Statute> {
+    // 1. Random Latency (800ms - 2500ms)
+    await new Promise(resolve => setTimeout(resolve, Math.random() * 1700 + 800));
+
+    const rand = Math.random();
+
+    // 2. Random Failures (20% chance)
+    if (rand < 0.20) {
+        if (Math.random() > 0.5) {
+            throw new Error('Network Error: Connection reset by peer');
+        } else {
+            throw new Error('Timeout waiting for upstream legislature server');
+        }
+    }
+
+    // 3. Suspicious Data (15% chance)
+    if (rand < 0.35) { // 20% + 15% = 35% cumulative
+        return {
+            stateCode,
+            citation: `${stateCode} Code § ???`,
+            textSnippet: `[AMBIGUOUS] Search returned partial matches for "${query}" but no definitive statute could be cited. Requires manual review.`,
+            effectiveDate: 'Unknown',
+            confidenceScore: 45,
+            sourceUrl: `https://legislature.${stateCode.toLowerCase()}.gov/search?q=${encodeURIComponent(query)}`,
+            trustLevel: Math.random() > 0.5 ? 'suspicious' : 'unverified',
+        };
+    }
+
+    // 4. Success (Remaining 65%)
     const limitationYears = Math.random() > 0.5 ? 2 : 5;
     return {
         stateCode,
@@ -39,6 +71,7 @@ function generateClientMockStatute(stateCode: StateCode, query: string): Statute
         effectiveDate: '2024-01-01',
         confidenceScore: Math.floor(Math.random() * 20) + 80,
         sourceUrl: `https://legislature.${stateCode.toLowerCase()}.gov/statutes`,
+        trustLevel: 'verified',
     };
 }
 
@@ -61,9 +94,7 @@ async function fetchStatuteFromApi(
     // 1. STRICT CLIENT-SIDE MOCK GUARD
     // If we are in mock mode, DO NOT attempt to hit the API at all.
     if (dataSource === 'mock') {
-        // Simulate network delay for realistic UX (500-1500ms)
-        await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 500));
-        return generateClientMockStatute(stateCode, query);
+        return mockFetchStatute(stateCode, query);
     }
 
     // 2. Real Mode (LLM Scraper or Official API)

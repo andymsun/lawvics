@@ -1,28 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useTheme } from 'next-themes';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import DashboardSidebar from '@/components/dashboard/DashboardSidebar';
-import { useSurveyHistoryStore, useNotificationStore } from '@/lib/store';
-import {
-    Settings,
-    Sun,
-    Moon,
-    Monitor,
-    Check,
-    X,
-    Trash2,
-    Zap,
-    Search,
-    User,
-    AlertTriangle,
-} from 'lucide-react';
-import Link from 'next/link';
-import { cn } from '@/lib/utils';
+import { Settings, Zap, AlertTriangle, Key, Eye, EyeOff, Database, Bot, Globe, Monitor, Moon, Sun, Layout, Sliders, ExternalLink, Check, Loader2, X } from 'lucide-react';
+import { useSettingsStore, DataSource } from '@/lib/store';
+import { useTheme } from 'next-themes';
+import { toast } from 'sonner';
 
 // ============================================================
-// Premium Toggle Component (reused pattern from SettingsModal)
+// Premium Toggle Switch Component
 // ============================================================
 
 interface PremiumToggleProps {
@@ -32,338 +18,600 @@ interface PremiumToggleProps {
     checked: boolean;
     onChange: () => void;
     disabled?: boolean;
+    warning?: string;
 }
 
-function PremiumToggle({
+const PremiumToggle = ({
     id,
     label,
     description,
     checked,
     onChange,
     disabled = false,
-}: PremiumToggleProps) {
+    warning,
+}: PremiumToggleProps) => {
     return (
-        <div className="flex items-start justify-between gap-4">
-            <div className="flex-1 space-y-1">
-                <label htmlFor={id} className="text-sm font-medium text-foreground cursor-pointer">
-                    {label}
-                </label>
-                {description && (
-                    <p className="text-xs text-muted-foreground">{description}</p>
-                )}
-            </div>
-            <button
-                id={id}
-                role="switch"
-                aria-checked={checked}
-                onClick={onChange}
-                disabled={disabled}
-                className={cn(
-                    'relative w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background',
-                    checked ? 'bg-primary' : 'bg-muted',
-                    disabled && 'opacity-50 cursor-not-allowed'
-                )}
+        <div className="relative">
+            <label
+                htmlFor={id}
+                className={`flex items-start gap-6 cursor-pointer group ${disabled ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
             >
-                <motion.div
-                    className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm"
-                    animate={{ x: checked ? 20 : 0 }}
-                    transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                />
-            </button>
-        </div>
-    );
-}
+                {/* Toggle Switch Container */}
+                <div className="relative flex items-center justify-center mt-1">
+                    <input
+                        id={id}
+                        type="checkbox"
+                        checked={checked}
+                        onChange={onChange}
+                        disabled={disabled}
+                        className="sr-only"
+                    />
 
-// ============================================================
-// Slider Component
-// ============================================================
+                    {/* Custom toggle switch */}
+                    <motion.div
+                        className={`
+                            w-14 h-8 rounded-full flex items-center px-1
+                            transition-colors duration-300
+                            ${checked
+                                ? 'bg-primary'
+                                : 'bg-muted border border-border group-hover:border-muted-foreground'
+                            }
+                        `}
+                        whileHover={!disabled ? { scale: 1.02 } : {}}
+                        whileTap={!disabled ? { scale: 0.98 } : {}}
+                    >
+                        <motion.div
+                            className={`
+                                w-6 h-6 rounded-full shadow-md
+                                ${checked ? 'bg-primary-foreground' : 'bg-foreground/80'}
+                            `}
+                            animate={{ x: checked ? 24 : 0 }}
+                            transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                        />
+                    </motion.div>
 
-interface SliderProps {
-    id: string;
-    label: string;
-    description?: string;
-    value: number;
-    onChange: (value: number) => void;
-    min: number;
-    max: number;
-    step?: number;
-}
-
-function Slider({ id, label, description, value, onChange, min, max, step = 1 }: SliderProps) {
-    return (
-        <div className="space-y-3">
-            <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                    <label htmlFor={id} className="text-sm font-medium text-foreground">
-                        {label}
-                    </label>
-                    {description && (
-                        <p className="text-xs text-muted-foreground">{description}</p>
+                    {/* Glow effect on hover */}
+                    {!disabled && (
+                        <motion.div
+                            className="absolute inset-0 rounded-full bg-primary opacity-0 group-hover:opacity-20 transition-opacity duration-300 blur-md"
+                        />
                     )}
                 </div>
-                <span className="text-sm font-semibold text-primary">{value}</span>
-            </div>
-            <input
-                id={id}
-                type="range"
-                min={min}
-                max={max}
-                step={step}
-                value={value}
-                onChange={(e) => onChange(Number(e.target.value))}
-                className="w-full h-2 bg-muted rounded-full appearance-none cursor-pointer accent-primary"
-            />
-            <div className="flex justify-between text-xs text-muted-foreground">
-                <span>{min}</span>
-                <span>{max}</span>
+
+                {/* Label and Description */}
+                <div className="flex-1 space-y-2">
+                    <div className="text-foreground font-medium text-lg tracking-wide">
+                        {label}
+                    </div>
+                    {description && (
+                        <div className="text-muted-foreground text-sm leading-relaxed">
+                            {description}
+                        </div>
+                    )}
+                    {warning && !checked && (
+                        <div className="flex items-center gap-2 text-amber-500 text-sm mt-2">
+                            <AlertTriangle className="w-4 h-4" />
+                            <span>{warning}</span>
+                        </div>
+                    )}
+                </div>
+            </label>
+        </div>
+    );
+};
+
+// ============================================================
+// API Key Input Component
+// ============================================================
+
+interface ApiKeyInputProps {
+    label: string;
+    value: string;
+    onChange: (key: string) => void;
+    placeholder?: string;
+    helperText?: string;
+    required?: boolean;
+    getKeyUrl?: string;
+    onTest?: (key: string) => Promise<boolean>;
+}
+
+const ApiKeyInput = ({ label, value, onChange, placeholder = "sk-...", helperText, required = false, getKeyUrl, onTest }: ApiKeyInputProps) => {
+    const [showKey, setShowKey] = React.useState(false);
+    const [isTesting, setIsTesting] = React.useState(false);
+    const [testStatus, setTestStatus] = React.useState<'idle' | 'success' | 'error'>('idle');
+    const hasKey = value.length > 0;
+
+    const handleTest = async () => {
+        if (!onTest || !value) return;
+        setIsTesting(true);
+        setTestStatus('idle');
+        try {
+            const success = await onTest(value);
+            setTestStatus(success ? 'success' : 'error');
+            if (success) {
+                toast.success(`${label} verified successfully!`);
+            } else {
+                toast.error(`Failed to verify ${label}.`);
+            }
+        } catch (error) {
+            setTestStatus('error');
+            toast.error(`Error verifying key.`);
+        } finally {
+            setIsTesting(false);
+        }
+    };
+
+    return (
+        <div className="space-y-3 pt-4 border-t border-border">
+            <div className="flex items-start gap-6">
+                <div className="p-2 rounded-lg bg-amber-500/10 mt-1">
+                    <Key className="w-5 h-5 text-amber-500" />
+                </div>
+                <div className="flex-1 space-y-3">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <div className="text-foreground font-medium text-lg tracking-wide">
+                                {label}
+                            </div>
+                            {helperText && (
+                                <div className="text-muted-foreground text-sm leading-relaxed mt-1">
+                                    {helperText}
+                                </div>
+                            )}
+                        </div>
+                        {getKeyUrl && (
+                            <a
+                                href={getKeyUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
+                            >
+                                Get Key <ExternalLink className="w-3 h-3" />
+                            </a>
+                        )}
+                    </div>
+
+                    {/* Input with visibility toggle and test button */}
+                    <div className="flex gap-2">
+                        <div className="relative flex-1">
+                            <input
+                                type={showKey ? 'text' : 'password'}
+                                value={value}
+                                onChange={(e) => {
+                                    onChange(e.target.value);
+                                    setTestStatus('idle');
+                                }}
+                                placeholder={placeholder}
+                                className="w-full px-4 py-3 pr-12 bg-muted border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all font-mono text-sm"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowKey(!showKey)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                                {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                        </div>
+                        {onTest && (
+                            <button
+                                onClick={handleTest}
+                                disabled={!value || isTesting}
+                                className={`
+                                    px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2
+                                    ${testStatus === 'success'
+                                        ? 'bg-green-500/10 text-green-500 border border-green-500/20'
+                                        : testStatus === 'error'
+                                            ? 'bg-red-500/10 text-red-500 border border-red-500/20'
+                                            : 'bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20'
+                                    }
+                                    ${(!value || isTesting) ? 'opacity-50 cursor-not-allowed' : ''}
+                                `}
+                            >
+                                {isTesting ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : testStatus === 'success' ? (
+                                    <>
+                                        <Check className="w-4 h-4" /> Verified
+                                    </>
+                                ) : testStatus === 'error' ? (
+                                    <>
+                                        <X className="w-4 h-4" /> Failed
+                                    </>
+                                ) : (
+                                    'Test Key'
+                                )}
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Warning if empty & required */}
+                    {required && !hasKey && (
+                        <div className="flex items-center gap-2 text-amber-500 text-sm">
+                            <AlertTriangle className="w-4 h-4" />
+                            <span>{label} is required for this mode.</span>
+                        </div>
+                    )}
+
+                    {/* Security helper text */}
+                    <div className="text-xs text-muted-foreground italic">
+                        Your key is stored locally in your browser and only used for verification.
+                    </div>
+                </div>
             </div>
         </div>
     );
+};
+
+// ============================================================
+// Data Source Selector
+// ============================================================
+
+interface DataSourceOption {
+    id: DataSource;
+    icon: React.ElementType;
+    label: string;
+    description: string;
 }
 
-// ============================================================
-// Theme Selector Component
-// ============================================================
+const DataSourceSelector = () => {
+    const { dataSource, setDataSource } = useSettingsStore();
 
-function ThemeSelector() {
-    const { theme, setTheme } = useTheme();
-
-    const themes = [
-        { id: 'light', label: 'Light', icon: Sun },
-        { id: 'dark', label: 'Dark', icon: Moon },
-        { id: 'system', label: 'System', icon: Monitor },
+    const sources: DataSourceOption[] = [
+        {
+            id: 'mock',
+            icon: Zap,
+            label: 'Mock Data',
+            description: 'Instant, free, simulated data. Best for testing UI flows.'
+        },
+        {
+            id: 'llm-scraper',
+            icon: Bot,
+            label: 'AI Scraper',
+            description: 'Deep search using LLMs + Web Browsing. Slow but thorough.'
+        },
+        {
+            id: 'official-api',
+            icon: Globe,
+            label: 'Open States API',
+            description: 'Official legislative data. Fast and accurate.'
+        }
     ];
 
     return (
-        <div className="space-y-3">
-            <div className="space-y-1">
-                <label className="text-sm font-medium text-foreground">Theme</label>
-                <p className="text-xs text-muted-foreground">
-                    Choose your preferred color scheme.
-                </p>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-                {themes.map((t) => (
-                    <button
-                        key={t.id}
-                        onClick={() => setTheme(t.id)}
-                        className={cn(
-                            'flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all',
-                            theme === t.id
-                                ? 'border-primary bg-primary/10'
-                                : 'border-border hover:border-muted-foreground bg-card'
-                        )}
+        <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {sources.map((source) => (
+                    <div
+                        key={source.id}
+                        onClick={() => setDataSource(source.id)}
+                        className={`
+                            cursor-pointer p-4 rounded-xl border-2 transition-all duration-200
+                            flex flex-col gap-3
+                            ${dataSource === source.id
+                                ? 'border-primary bg-primary/5 shadow-lg scale-[1.02]'
+                                : 'border-border bg-card hover:border-muted-foreground/50 hover:bg-muted/30'
+                            }
+                        `}
                     >
-                        <t.icon className={cn(
-                            'w-5 h-5',
-                            theme === t.id ? 'text-primary' : 'text-muted-foreground'
-                        )} />
-                        <span className={cn(
-                            'text-xs font-medium',
-                            theme === t.id ? 'text-primary' : 'text-muted-foreground'
-                        )}>
-                            {t.label}
-                        </span>
-                        {theme === t.id && (
-                            <Check className="w-4 h-4 text-primary" />
-                        )}
-                    </button>
+                        <div className={`p-2 w-fit rounded-lg ${dataSource === source.id ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                            <source.icon className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <div className="font-semibold text-foreground">{source.label}</div>
+                            <div className="text-xs text-muted-foreground mt-1 leading-snug">{source.description}</div>
+                        </div>
+                    </div>
                 ))}
             </div>
         </div>
     );
-}
+};
 
 // ============================================================
-// Main Settings Page
+// Settings Page Component
 // ============================================================
+
+type TabType = 'datasource' | 'preferences' | 'system';
 
 export default function SettingsPage() {
-    const [mounted, setMounted] = useState(false);
-    const { resolvedTheme, setTheme } = useTheme();
-    const clearNotifications = useNotificationStore((state) => state.clearNotifications);
+    const settings = useSettingsStore();
+    const { theme, setTheme } = useTheme();
+    const [activeTab, setActiveTab] = useState<TabType>('datasource');
 
-    // Prevent hydration mismatch
-    useEffect(() => {
-        setMounted(true);
-    }, []);
+    const tabs: { id: TabType; label: string; icon: React.ElementType }[] = [
+        { id: 'datasource', label: 'Data Source', icon: Database },
+        { id: 'preferences', label: 'Search Prefs', icon: Sliders },
+        { id: 'system', label: 'System', icon: Monitor },
+    ];
 
-    // Direct function to clear surveys - avoiding broken closure pattern
-    const clearSurveys = () => {
-        useSurveyHistoryStore.setState({ surveys: [], activeSurveyId: null });
+    const searchOptions = [
+        {
+            id: 'parallelFetch',
+            label: 'Parallel Fetching',
+            description: 'Enable simultaneous queries across all 50 jurisdictions for maximum speed.',
+        },
+        {
+            id: 'autoVerify',
+            label: 'Auto-Verification',
+            description: 'Automatically run Shepardizing checks on all returned statutes to detect hallucinations.',
+        },
+        {
+            id: 'showConfidence',
+            label: 'Confidence Scores',
+            description: 'Display confidence percentages and trust badges on statute cards.',
+        },
+        {
+            id: 'cacheResults',
+            label: 'Cache Results',
+            description: 'Store verified results locally to speed up repeat queries (experimental).',
+        }
+    ] as const;
+
+    const testOpenAIKey = async (key: string) => {
+        try {
+            const res = await fetch('https://api.openai.com/v1/models', {
+                headers: { Authorization: `Bearer ${key}` }
+            });
+            return res.ok;
+        } catch {
+            return false;
+        }
     };
 
-    // Local settings state (would typically persist to localStorage or backend)
-    const [settings, setSettings] = useState({
-        autoVerify: true,
-        parallelChunkSize: 5,
-    });
-    const [showClearConfirm, setShowClearConfirm] = useState(false);
-
-    const toggleTheme = () => {
-        setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
+    const testGeminiKey = async (key: string) => {
+        // Can't easily test without a complex payload, but we can try a list models endpoint if available or just assume non-empty
+        // For now, let's just do a basic check or simulate for user
+        try {
+            // Gemini API check typically requires a specific endpoint with key
+            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+            return res.ok;
+        } catch {
+            return false;
+        }
     };
 
-    const handleClearHistory = () => {
-        clearSurveys();
-        clearNotifications();
-        setShowClearConfirm(false);
+    const testOpenStatesKey = async (key: string) => {
+        try {
+            const res = await fetch('https://v3.openstates.org/jurisdictions', {
+                headers: { 'X-API-KEY': key }
+            });
+            return res.ok;
+        } catch {
+            return false;
+        }
     };
 
     return (
-        <div className="h-screen w-full flex flex-col bg-background text-foreground font-sans overflow-hidden">
-            {/* Top Bar */}
-            <header className="flex-shrink-0 border-b border-border bg-card/80 backdrop-blur-sm z-30">
-                <div className="px-4 py-3 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <Link href="/" className="flex items-center gap-2">
-                            <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-700 to-slate-500 dark:from-slate-200 dark:to-slate-400">
-                                Lawvics
-                            </span>
-                            <span className="text-xs px-2 py-0.5 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-full font-medium">
-                                v1.0
-                            </span>
-                        </Link>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={toggleTheme}
-                            className="p-2 rounded-lg hover:bg-muted transition-colors"
-                            title={mounted ? (resolvedTheme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode') : 'Toggle Theme'}
-                        >
-                            {mounted && resolvedTheme === 'dark' ? (
-                                <Sun className="w-5 h-5 text-yellow-400" />
-                            ) : (
-                                <Moon className="w-5 h-5 text-muted-foreground hover:text-foreground" />
-                            )}
-                        </button>
+        <div className="h-full flex flex-col p-6 space-y-6">
+
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                    <h1 className="text-3xl font-bold tracking-tight text-foreground">Settings</h1>
+                    <p className="text-muted-foreground">Manage your Lawvics engine configuration and preferences.</p>
+                </div>
+            </div>
+
+            <div className="flex-1 bg-card border border-border rounded-xl shadow-sm overflow-hidden flex flex-col md:flex-row">
+
+                {/* Sidebar / Tabs */}
+                <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-border p-4 bg-muted/20">
+                    <div className="space-y-1">
+                        {tabs.map((tab) => (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                className={`
+                                    w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all
+                                    ${activeTab === tab.id
+                                        ? 'bg-primary/10 text-primary shadow-sm'
+                                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                                    }
+                                `}
+                            >
+                                <tab.icon className="w-4 h-4" />
+                                {tab.label}
+                            </button>
+                        ))}
                     </div>
                 </div>
-            </header>
 
-            {/* Main Layout */}
-            <div className="flex-1 flex overflow-hidden">
-                {/* Left Sidebar */}
-                <DashboardSidebar activeTab="settings" />
+                {/* Content Area */}
+                <div className="flex-1 p-6 overflow-auto">
+                    <AnimatePresence mode="wait">
+                        {activeTab === 'datasource' && (
+                            <motion.div
+                                key="datasource"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                transition={{ duration: 0.2 }}
+                                className="space-y-6 max-w-3xl"
+                            >
+                                <div>
+                                    <h2 className="text-xl font-semibold mb-1">Data Source</h2>
+                                    <p className="text-muted-foreground text-sm">
+                                        Choose where Lawvics fetches legal data from.
+                                    </p>
+                                </div>
+                                <DataSourceSelector />
 
-                {/* Main Content */}
-                <main className="flex-1 overflow-auto p-6">
-                    <div className="max-w-2xl">
-                        {/* Header */}
-                        <div className="mb-8">
-                            <h1 className="text-2xl font-bold text-foreground">Settings</h1>
-                            <p className="text-sm text-muted-foreground mt-1">
-                                Configure your research preferences and account settings.
-                            </p>
-                        </div>
-
-                        {/* Settings Sections */}
-                        <div className="space-y-8">
-                            {/* General Section */}
-                            <section className="space-y-6">
-                                <div className="flex items-center gap-2">
-                                    <div className="p-2 rounded-lg bg-primary/10">
-                                        <Settings className="w-4 h-4 text-primary" />
+                                {/* API Keys based on Data Source */}
+                                {settings.dataSource === 'llm-scraper' && (
+                                    <div className="space-y-4 pt-4 border-t border-border animate-in fade-in slide-in-from-top-4">
+                                        <ApiKeyInput
+                                            label="OpenAI API Key"
+                                            value={settings.openaiApiKey}
+                                            onChange={settings.setOpenaiApiKey}
+                                            helperText="Required for intelligent parsing and verification."
+                                            getKeyUrl="https://platform.openai.com/api-keys"
+                                            onTest={testOpenAIKey}
+                                        />
+                                        <ApiKeyInput
+                                            label="Gemini API Key"
+                                            value={settings.geminiApiKey}
+                                            onChange={settings.setGeminiApiKey}
+                                            helperText="Optional fallback for Google Gemini models."
+                                            placeholder="AIzp..."
+                                            getKeyUrl="https://aistudio.google.com/app/apikey"
+                                            onTest={testGeminiKey}
+                                        />
                                     </div>
-                                    <h2 className="text-lg font-semibold text-foreground">General</h2>
-                                </div>
-                                <div className="bg-card border border-border rounded-xl p-6 space-y-6">
-                                    <ThemeSelector />
-                                </div>
-                            </section>
-
-                            {/* Search Section */}
-                            <section className="space-y-6">
-                                <div className="flex items-center gap-2">
-                                    <div className="p-2 rounded-lg bg-primary/10">
-                                        <Search className="w-4 h-4 text-primary" />
+                                )}
+                                {settings.dataSource === 'official-api' && (
+                                    <div className="space-y-4 pt-4 border-t border-border animate-in fade-in slide-in-from-top-4">
+                                        <ApiKeyInput
+                                            label="Open States API Key"
+                                            value={settings.openStatesApiKey}
+                                            onChange={settings.setOpenStatesApiKey}
+                                            helperText="Get a free key at openstates.org"
+                                            required={true}
+                                            getKeyUrl="https://openstates.org/accounts/profile/"
+                                            onTest={testOpenStatesKey}
+                                        />
                                     </div>
-                                    <h2 className="text-lg font-semibold text-foreground">Search</h2>
+                                )}
+                            </motion.div>
+                        )}
+
+                        {activeTab === 'preferences' && (
+                            <motion.div
+                                key="preferences"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                transition={{ duration: 0.2 }}
+                                className="space-y-8 max-w-3xl"
+                            >
+                                <div>
+                                    <h2 className="text-xl font-semibold mb-1">Search Preferences</h2>
+                                    <p className="text-muted-foreground text-sm">
+                                        Fine-tune the search engine behavior and performance.
+                                    </p>
                                 </div>
-                                <div className="bg-card border border-border rounded-xl p-6 space-y-6">
+                                {searchOptions.map((option) => (
                                     <PremiumToggle
-                                        id="auto-verify"
-                                        label="Auto-Verify Citations"
-                                        description="Automatically run Shepardizing checks on all returned statutes to detect outdated or repealed laws."
-                                        checked={settings.autoVerify}
-                                        onChange={() => setSettings((s) => ({ ...s, autoVerify: !s.autoVerify }))}
+                                        key={option.id}
+                                        id={option.id}
+                                        label={option.label}
+                                        description={option.description}
+                                        checked={settings[option.id] as boolean}
+                                        onChange={() => settings.toggleSetting(option.id)}
                                     />
-                                    <div className="h-px bg-border" />
-                                    <Slider
-                                        id="parallel-chunk"
-                                        label="Parallel Chunk Size"
-                                        description="Number of states to query simultaneously. Higher values are faster but may hit rate limits."
-                                        value={settings.parallelChunkSize}
-                                        onChange={(v) => setSettings((s) => ({ ...s, parallelChunkSize: v }))}
-                                        min={1}
-                                        max={10}
-                                    />
-                                </div>
-                            </section>
+                                ))}
+                            </motion.div>
+                        )}
 
-                            {/* Account Section */}
-                            <section className="space-y-6">
-                                <div className="flex items-center gap-2">
-                                    <div className="p-2 rounded-lg bg-primary/10">
-                                        <User className="w-4 h-4 text-primary" />
-                                    </div>
-                                    <h2 className="text-lg font-semibold text-foreground">Account</h2>
+                        {activeTab === 'system' && (
+                            <motion.div
+                                key="system"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                transition={{ duration: 0.2 }}
+                                className="space-y-8 max-w-3xl"
+                            >
+                                <div>
+                                    <h2 className="text-xl font-semibold mb-1">System</h2>
+                                    <p className="text-muted-foreground text-sm">
+                                        Customize the look and feel of the application.
+                                    </p>
                                 </div>
-                                <div className="bg-card border border-border rounded-xl p-6 space-y-6">
-                                    <div className="space-y-3">
-                                        <div className="space-y-1">
-                                            <label className="text-sm font-medium text-foreground">
-                                                Clear All History
-                                            </label>
-                                            <p className="text-xs text-muted-foreground">
-                                                Permanently delete all survey history and notifications. This cannot be undone.
-                                            </p>
-                                        </div>
 
-                                        <AnimatePresence mode="wait">
-                                            {showClearConfirm ? (
-                                                <motion.div
-                                                    initial={{ opacity: 0, y: -10 }}
-                                                    animate={{ opacity: 1, y: 0 }}
-                                                    exit={{ opacity: 0, y: -10 }}
-                                                    className="flex items-center gap-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg"
-                                                >
-                                                    <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
-                                                    <span className="text-sm text-red-600 dark:text-red-400 flex-1">
-                                                        Are you sure? This cannot be undone.
-                                                    </span>
-                                                    <button
-                                                        onClick={handleClearHistory}
-                                                        className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-                                                    >
-                                                        Yes, Clear
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setShowClearConfirm(false)}
-                                                        className="px-3 py-1.5 text-xs font-medium bg-muted text-muted-foreground rounded-lg hover:bg-accent transition-colors"
-                                                    >
-                                                        Cancel
-                                                    </button>
-                                                </motion.div>
-                                            ) : (
-                                                <motion.button
-                                                    initial={{ opacity: 0, y: 10 }}
-                                                    animate={{ opacity: 1, y: 0 }}
-                                                    exit={{ opacity: 0, y: 10 }}
-                                                    onClick={() => setShowClearConfirm(true)}
-                                                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/10 transition-colors"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                    Clear All History
-                                                </motion.button>
-                                            )}
-                                        </AnimatePresence>
+                                {/* Theme Toggle */}
+                                <div className="space-y-4">
+                                    <label className="text-foreground font-medium text-lg tracking-wide flex items-center gap-2">
+                                        <Layout className="w-5 h-5 text-primary" />
+                                        Mode
+                                    </label>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                        <button
+                                            onClick={() => setTheme('light')}
+                                            className={`p-4 rounded-xl border-2 flex flex-col items-center gap-2 transition-all ${theme === 'light' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted'
+                                                }`}
+                                        >
+                                            <Sun className="w-6 h-6" />
+                                            <span className="text-sm font-medium">Light</span>
+                                        </button>
+                                        <button
+                                            onClick={() => setTheme('dark')}
+                                            className={`p-4 rounded-xl border-2 flex flex-col items-center gap-2 transition-all ${theme === 'dark' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted'
+                                                }`}
+                                        >
+                                            <Moon className="w-6 h-6" />
+                                            <span className="text-sm font-medium">Dark</span>
+                                        </button>
+                                        <button
+                                            onClick={() => setTheme('system')}
+                                            className={`p-4 rounded-xl border-2 flex flex-col items-center gap-2 transition-all ${theme === 'system' ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted'
+                                                }`}
+                                        >
+                                            <Monitor className="w-6 h-6" />
+                                            <span className="text-sm font-medium">System</span>
+                                        </button>
                                     </div>
                                 </div>
-                            </section>
-                        </div>
-                    </div>
-                </main>
+
+                                {/* Color Theme Picker */}
+                                <div className="space-y-4 pt-4 border-t border-border">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-foreground font-medium text-lg tracking-wide flex items-center gap-2">
+                                            <Zap className="w-5 h-5 text-primary" />
+                                            Primary Color
+                                        </label>
+                                        {settings.themeColor !== 'blue' && (
+                                            <button
+                                                onClick={() => settings.setThemeColor('blue')}
+                                                className="text-xs text-primary hover:underline"
+                                            >
+                                                Reset to Default
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="grid grid-cols-5 gap-4">
+                                        {(['blue', 'violet', 'green', 'rose', 'orange'] as const).map((color) => (
+                                            <button
+                                                key={color}
+                                                onClick={() => settings.setThemeColor(color)}
+                                                className={`
+                                                    group relative p-2 rounded-xl border-2 transition-all duration-200 aspect-square flex items-center justify-center
+                                                    ${settings.themeColor === color
+                                                        ? 'border-primary bg-muted shadow-md scale-105'
+                                                        : 'border-border hover:border-border/80 hover:scale-105'
+                                                    }
+                                                `}
+                                                title={color.charAt(0).toUpperCase() + color.slice(1)}
+                                            >
+                                                <div
+                                                    className="w-full h-full rounded-lg shadow-sm"
+                                                    style={{
+                                                        background: color === 'blue' ? '#3b82f6' :
+                                                            color === 'violet' ? '#7c3aed' :
+                                                                color === 'green' ? '#10b981' :
+                                                                    color === 'rose' ? '#f43f5e' : '#f97316'
+                                                    }}
+                                                />
+                                                {settings.themeColor === color && (
+                                                    <motion.div
+                                                        initial={{ scale: 0 }}
+                                                        animate={{ scale: 1 }}
+                                                        className="absolute inset-0 flex items-center justify-center"
+                                                    >
+                                                        <Check className="w-6 h-6 text-white drop-shadow-md" strokeWidth={3} />
+                                                    </motion.div>
+                                                )}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <p className="text-sm text-muted-foreground">
+                                        Select an accent color for the entire application.
+                                    </p>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
             </div>
         </div>
     );

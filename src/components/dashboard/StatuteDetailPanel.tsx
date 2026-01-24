@@ -52,22 +52,13 @@ export default function StatuteDetailPanel() {
         <AnimatePresence>
             {activeStateCode && (
                 <>
-                    {/* Backdrop */}
+                    {/* Floating Panel (Non-intrusive) */}
                     <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-background/50 backdrop-blur-sm z-40"
-                        onClick={handleClose}
-                    />
-
-                    {/* Slide-over Panel */}
-                    <motion.div
-                        initial={{ x: '100%' }}
-                        animate={{ x: 0 }}
-                        exit={{ x: '100%' }}
-                        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                        className="fixed right-0 top-0 h-full w-full max-w-md bg-card border-l border-border shadow-2xl z-50 overflow-y-auto"
+                        initial={{ x: '100%', opacity: 0 }}
+                        animate={{ x: 0, opacity: 1 }}
+                        exit={{ x: '100%', opacity: 0 }}
+                        transition={{ type: 'spring', stiffness: 400, damping: 40 }}
+                        className="absolute right-4 top-4 bottom-4 w-96 bg-card/95 backdrop-blur-md border border-border rounded-xl shadow-2xl z-40 overflow-hidden flex flex-col pointer-events-auto"
                     >
                         {/* Header */}
                         <div className="sticky top-0 bg-card/95 backdrop-blur z-10 px-6 py-4 border-b border-border flex items-center justify-between">

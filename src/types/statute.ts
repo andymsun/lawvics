@@ -35,4 +35,9 @@ export interface Statute {
    * Direct URL to the official government source.
    */
   sourceUrl: string;
+
+  /**
+   * Optional override for trust level (useful for mock/chaos modes).
+   */
+  trustLevel?: 'verified' | 'unverified' | 'suspicious';
 }

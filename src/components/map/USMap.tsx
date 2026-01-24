@@ -52,11 +52,43 @@ function useMapColors() {
     return {
         idle: isDark ? '#374151' : '#E5E7EB',      // neutral-700 / neutral-200
         loading: isDark ? '#4B5563' : '#D1D5DB',   // neutral-600 / neutral-300
-        success: '#3B82F6',                         // blue-500
-        error: '#EF4444',                           // red-500
+        success: '#22C55E',                         // green-500 (Verified)
+        suspicious: '#EAB308',                      // yellow-500 (Suspicious/Unverified)
+        error: '#EF4444',                           // red-500 (Error)
         hover: '#6366F1',                           // indigo-500
         stroke: isDark ? '#1F2937' : '#F9FAFB',    // neutral-800 / neutral-50
     };
+}
+
+// ============================================================
+// Legend Component
+// ============================================================
+
+function MapLegend({ colors }: { colors: ReturnType<typeof useMapColors> }) {
+    return (
+        <div className="flex items-center gap-4 text-xs text-muted-foreground bg-card/50 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-border/50 shadow-sm">
+            <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-sm" style={{ background: colors.idle }} />
+                <span>Pending</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-sm animate-pulse" style={{ background: colors.loading }} />
+                <span>Loading</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-sm" style={{ background: colors.success }} />
+                <span>Verified</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-sm" style={{ background: colors.suspicious }} />
+                <span>Suspicious</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-sm" style={{ background: colors.error }} />
+                <span>Error</span>
+            </div>
+        </div>
+    );
 }
 
 export default function USMap({ onStateClick }: USMapProps) {
@@ -97,6 +129,15 @@ export default function USMap({ onStateClick }: USMapProps) {
             if (!stateCode) return colors.idle;
 
             const entry = statutes[stateCode];
+
+            // If we are running a survey and don't have this state yet, show as loading if active
+            const isRunning = activeSession?.status === 'running';
+            if (!entry && isRunning) {
+                // Optional: Only show some random loading states or all remaining?
+                // For now, keep them idle until processed to match linear progress
+                return colors.idle;
+            }
+
             if (!entry) return colors.idle;
 
             // Check if it's an Error
@@ -104,10 +145,19 @@ export default function USMap({ onStateClick }: USMapProps) {
                 return colors.error;
             }
 
-            // It's a Statute (success)
+            // It's a Statute - check trust level
+            if (entry.trustLevel === 'suspicious' || entry.trustLevel === 'unverified') {
+                return colors.suspicious;
+            }
+
+            // Fallback for missing trustLevel based on confidence
+            if (entry.confidenceScore < 70) {
+                return colors.suspicious;
+            }
+
             return colors.success;
         },
-        [statutes, colors]
+        [statutes, colors, activeSession?.status]
     );
 
     const setActiveState = useSurveyHistoryStore((state) => state.setActiveState);
@@ -189,28 +239,19 @@ export default function USMap({ onStateClick }: USMapProps) {
                     <div className="text-sm font-medium text-muted-foreground">
                         Progress: <span className="text-primary font-bold">{percentComplete}%</span>
                     </div>
-                    <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div
-                            className="h-full bg-primary transition-all duration-300 ease-out"
-                            style={{ width: `${percentComplete}%` }}
-                        />
-                    </div>
                 </div>
 
-                {/* Legend */}
-                <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1.5">
-                        <div className="w-2.5 h-2.5 rounded-sm" style={{ background: colors.idle }} />
-                        <span>Pending</span>
+                {/* Current Query Display */}
+                {activeSession?.query && (
+                    <div className="absolute left-1/2 -translate-x-1/2 px-4 py-1.5 bg-background/80 backdrop-blur-md rounded-full border border-border shadow-sm text-sm font-medium text-foreground max-w-md truncate">
+                        <span className="text-muted-foreground mr-2">Query:</span>
+                        &ldquo;{activeSession.query}&rdquo;
                     </div>
-                    <div className="flex items-center gap-1.5">
-                        <div className="w-2.5 h-2.5 rounded-sm" style={{ background: colors.success }} />
-                        <span>Found</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                        <div className="w-2.5 h-2.5 rounded-sm" style={{ background: colors.error }} />
-                        <span>Error</span>
-                    </div>
+                )}
+
+                <div className="flex items-center gap-4">
+                    {/* Legend - Now using the component */}
+                    <MapLegend colors={colors} />
                 </div>
 
                 {/* Zoom Controls */}

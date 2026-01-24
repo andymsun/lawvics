@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
+import ThemeManager from "@/components/ThemeManager";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -18,6 +19,8 @@ export const metadata: Metadata = {
   description: "AI-powered legal research across all 50 US jurisdictions",
 };
 
+import { Toaster } from "sonner";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -34,7 +37,9 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          <ThemeManager />
           {children}
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>

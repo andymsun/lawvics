@@ -311,6 +311,7 @@ export const useLegalStore = create<LegalStore & StoreActions>((set) => ({
 // ============================================================
 
 export type DataSource = 'mock' | 'llm-scraper' | 'official-api';
+export type ThemeColor = 'blue' | 'violet' | 'green' | 'rose' | 'orange';
 
 export interface SettingsState {
     /** USource of statute data */
@@ -329,6 +330,8 @@ export interface SettingsState {
     showConfidence: boolean;
     /** Store verified results locally (experimental) */
     cacheResults: boolean;
+    /** Primary theme color */
+    themeColor: ThemeColor;
 }
 
 interface SettingsActions {
@@ -341,9 +344,11 @@ interface SettingsActions {
     /** Set the Open States API key */
     setOpenStatesApiKey: (key: string) => void;
     /** Update any boolean setting */
-    setSetting: <K extends keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openStatesApiKey'>>(key: K, value: SettingsState[K]) => void;
+    setSetting: <K extends keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openStatesApiKey' | 'themeColor'>>(key: K, value: SettingsState[K]) => void;
     /** Toggle a boolean setting */
-    toggleSetting: (key: keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openStatesApiKey'>) => void;
+    toggleSetting: (key: keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openStatesApiKey' | 'themeColor'>) => void;
+    /** Set the theme color */
+    setThemeColor: (color: ThemeColor) => void;
 }
 
 export type SettingsStore = SettingsState & SettingsActions;
@@ -357,6 +362,7 @@ const DEFAULT_SETTINGS: SettingsState = {
     autoVerify: true,
     showConfidence: true,
     cacheResults: false,
+    themeColor: 'blue',
 };
 
 /**
@@ -394,6 +400,7 @@ function persistSettings(settings: SettingsState): void {
             autoVerify: settings.autoVerify,
             showConfidence: settings.showConfidence,
             cacheResults: settings.cacheResults,
+            themeColor: settings.themeColor,
         };
         localStorage.setItem('lawvics-settings', JSON.stringify(stateToPersist));
     } catch {
@@ -432,6 +439,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     toggleSetting: (key) => {
         const current = get()[key];
         set({ [key]: !current } as Partial<SettingsState>);
+        persistSettings(get());
+    },
+
+    setThemeColor: (color) => {
+        set({ themeColor: color });
         persistSettings(get());
     },
 }));

@@ -1,5 +1,6 @@
 'use client';
 
+
 import { useSurveyHistoryStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import {
@@ -32,11 +33,10 @@ export function DashboardSidebar({ activeTab = 'workspace' }: DashboardSidebarPr
     const navItems = [
         { id: 'workspace', label: 'Workspace', icon: LayoutDashboard, href: '/dashboard' },
         { id: 'history', label: 'History', icon: History, href: '/dashboard/history' },
-        { id: 'settings', label: 'Settings', icon: Settings, href: '/dashboard/settings' },
     ];
 
     return (
-        <aside className="w-64 flex-shrink-0 border-r border-border bg-card/50 flex flex-col">
+        <aside className="w-64 flex-shrink-0 border-r border-border bg-card/50 flex flex-col h-full overflow-hidden">
             {/* Navigation */}
             <nav className="p-4 space-y-1">
                 {navItems.map((item) => (
@@ -62,7 +62,7 @@ export function DashboardSidebar({ activeTab = 'workspace' }: DashboardSidebarPr
             </div>
 
             {/* Metrics */}
-            <div className="p-4 space-y-4 flex-1">
+            <div className="p-4 space-y-4 flex-1 overflow-auto">
                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Metrics
                 </h3>
@@ -112,7 +112,7 @@ export function DashboardSidebar({ activeTab = 'workspace' }: DashboardSidebarPr
             </div>
 
             {/* Footer */}
-            <div className="p-4 border-t border-border">
+            <div className="p-4 border-t border-border mt-auto">
                 <div className="text-xs text-muted-foreground text-center">
                     Lawvics v1.0
                 </div>

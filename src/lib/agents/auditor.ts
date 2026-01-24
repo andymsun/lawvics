@@ -282,6 +282,23 @@ export async function verifyStatuteV2(
     userQuery: string = '',
     mockMode: boolean = DEFAULT_MOCK_MODE
 ): Promise<VerificationResult> {
+    // If statute has an explicit trust level (e.g. from chaos mode), respect it
+    if (statute.trustLevel) {
+        return {
+            trustLevel: statute.trustLevel,
+            isOfficialSource: checkOfficialSource(statute.sourceUrl),
+            isRepealed: false,
+            isHallucinated: false,
+            message: statute.trustLevel === 'suspicious'
+                ? 'Flagged as suspicious by source'
+                : statute.trustLevel === 'unverified'
+                    ? 'Source verification pending or inconclusive'
+                    : 'Verified by source',
+            verifiedAt: new Date().toISOString(),
+            confidence_reasoning: 'Trust level explicitly set by orchestrator.',
+        };
+    }
+
     return verifyStatuteCitation(
         statute.citation,
         statute.sourceUrl,
