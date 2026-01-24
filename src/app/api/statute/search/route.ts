@@ -139,44 +139,74 @@ async function scrapeStateStatute(
         headers = {};
     }
 
-    try {
-        // 1. Fetch the page content
-        const res = await fetch(targetUrl, {
-            next: { revalidate: 3600 },
-            headers
-        });
-        const html = await res.text();
-        const $ = cheerio.load(html);
+    // Retry logic with exponential backoff
+    const MAX_RETRIES = 3;
+    let lastError: Error | null = null;
 
-        // 2. Clean text (remove scripts, styles, etc.)
-        $('script, style, nav, footer').remove();
-        const cleanText = $('body').text().replace(/\s+/g, ' ').substring(0, 15000);
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        try {
+            // 1. Fetch the page content
+            const res = await fetch(targetUrl, {
+                headers
+            });
 
-        // 3. LLM Extraction
-        const model = getModel(keys, activeProvider, aiModel);
-        const { object } = await generateObject({
-            model,
-            schema: ScraperSchema,
-            prompt: `Extract statute information for the query "${query}" from the following text from ${stateCode}'s legislature website:
+            // Handle rate limiting (429) and server errors (5xx)
+            if (res.status === 429 || res.status >= 500) {
+                const retryAfter = res.headers.get('Retry-After');
+                const delay = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, attempt) * 1000;
+                console.log(`[Scraper] ${stateCode} got ${res.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+                await new Promise(r => setTimeout(r, delay));
+                continue;
+            }
+
+            if (res.status === 404) {
+                throw new Error(`404: Resource not found for ${stateCode}`);
+            }
+
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+            }
+
+            const html = await res.text();
+            const $ = cheerio.load(html);
+
+            // 2. Clean text (remove scripts, styles, etc.)
+            $('script, style, nav, footer').remove();
+            const cleanText = $('body').text().replace(/\s+/g, ' ').substring(0, 15000);
+
+            // 3. LLM Extraction
+            const model = getModel(keys, activeProvider, aiModel);
+            const { object } = await generateObject({
+                model,
+                schema: ScraperSchema,
+                prompt: `Extract statute information for the query "${query}" from the following text from ${stateCode}'s legislature website:
             
             TEXT:
             "${cleanText}"
             
             If no specific statute is found, return the best match or state "None found" in citation.`,
-        });
+            });
 
-        return {
-            stateCode,
-            citation: object.citation,
-            textSnippet: object.textSnippet,
-            effectiveDate: object.effectiveDate,
-            confidenceScore: object.confidence,
-            sourceUrl: baseUrl,
-        };
-    } catch (error) {
-        console.error(`Scrape failed for ${stateCode}:`, error);
-        throw new Error(`Failed to scrape ${stateCode} legislature: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            return {
+                stateCode,
+                citation: object.citation,
+                textSnippet: object.textSnippet,
+                effectiveDate: object.effectiveDate,
+                confidenceScore: object.confidence,
+                sourceUrl: baseUrl,
+            };
+        } catch (error) {
+            lastError = error instanceof Error ? error : new Error(String(error));
+            console.error(`[Scraper] Attempt ${attempt + 1} failed for ${stateCode}:`, error);
+
+            // Wait before retry (exponential backoff)
+            if (attempt < MAX_RETRIES - 1) {
+                await new Promise(r => setTimeout(r, Math.pow(2, attempt) * 1000));
+            }
+        }
     }
+
+    throw lastError || new Error(`Failed to scrape ${stateCode} after ${MAX_RETRIES} attempts`);
 }
 
 // ============================================================

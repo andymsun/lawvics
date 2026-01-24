@@ -10,8 +10,11 @@ import { Statute as LegalStatute } from '@/types/legal';
 // Configuration
 // ============================================================
 
-/** Number of states to process concurrently */
-const CHUNK_SIZE = 5;
+/** Number of states to process concurrently (reduced to avoid rate limits) */
+const CHUNK_SIZE = 2;
+
+/** Delay in ms between processing chunks to avoid rate limits */
+const INTER_CHUNK_DELAY_MS = 1500;
 
 /** Default mock mode setting (can be overridden by caller) */
 const DEFAULT_MOCK_MODE = true;
@@ -334,6 +337,9 @@ export async function searchAllStates(
         const [successes, errors] = await processChunk(chunk, queries, surveyId, useMockMode, openaiApiKey);
         totalSuccesses += successes;
         totalErrors += errors;
+
+        // Add delay between chunks to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, INTER_CHUNK_DELAY_MS));
     }
 
     // Double check status before final completion (don't override cancellation)
