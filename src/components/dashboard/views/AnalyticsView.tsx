@@ -129,7 +129,7 @@ export default function AnalyticsView() {
                         <AlertCircle className="w-4 h-4" />
                         <span className="text-xs font-medium uppercase">Errors</span>
                     </div>
-                    <div className="text-3xl font-bold text-red-500">{analytics.errorCount}</div>
+                    <div className="text-3xl font-bold text-error">{analytics.errorCount}</div>
                 </div>
                 <div className="p-4 rounded-lg bg-card border border-border">
                     <div className="flex items-center gap-2 text-muted-foreground mb-2">
@@ -170,7 +170,7 @@ export default function AnalyticsView() {
                     <h3 className="text-sm font-semibold mb-4">Status Distribution</h3>
                     <div className="space-y-3">
                         <Bar label="Verified" value={analytics.successCount} max={50} color="bg-green-500" />
-                        <Bar label="Errors" value={analytics.errorCount} max={50} color="bg-red-500" />
+                        <Bar label="Errors" value={analytics.errorCount} max={50} color="bg-error" />
                         <Bar label="Pending" value={analytics.pendingCount} max={50} color="bg-slate-400" />
                     </div>
 

@@ -54,8 +54,8 @@ function useMapColors() {
         idle: isDark ? '#374151' : '#E5E7EB',      // neutral-700 / neutral-200
         loading: isDark ? '#4B5563' : '#D1D5DB',   // neutral-600 / neutral-300
         success: '#22c55e',                         // green-500 (Vibrant Verified)
-        suspicious: '#ef4444',                      // red-500 (Vibrant Risk)
-        error: '#94a3b8',                           // slate-400 (Distinct Gray Error)
+        suspicious: 'var(--risk)',                  // Risk (Yellow)
+        error: 'var(--error)',                      // Error (Red)
         hover: '#6366F1',                           // indigo-500
         stroke: isDark ? '#1F2937' : '#F9FAFB',    // neutral-800 / neutral-50
     };
@@ -235,7 +235,7 @@ export default function USMap({ onStateClick }: USMapProps) {
     return (
         <div className="w-full h-full flex flex-col">
             {/* Controls Bar */}
-            <div className="flex items-center justify-between px-4 py-2 bg-card/50 backdrop-blur-sm border-b border-border">
+            <div className="relative flex items-center justify-between px-4 py-2 bg-card/50 backdrop-blur-sm border-b border-border">
                 <div className="flex items-center gap-4">
                     <div className="text-sm font-medium text-muted-foreground">
                         Progress: <span className="text-primary font-bold">{percentComplete}%</span>
@@ -243,7 +243,7 @@ export default function USMap({ onStateClick }: USMapProps) {
                     {activeSession?.status === 'running' && (
                         <button
                             onClick={() => activeSession && useSurveyHistoryStore.getState().cancelSurvey(activeSession.id)}
-                            className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 text-xs font-semibold rounded-full border border-red-200 dark:border-red-900/50 transition-colors"
+                            className="flex items-center gap-1.5 px-3 py-1 bg-error/10 hover:bg-error/20 text-error text-xs font-semibold rounded-full border border-error/30 transition-colors"
                         >
                             <X className="w-3.5 h-3.5" />
                             Cancel Survey

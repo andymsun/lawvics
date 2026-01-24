@@ -709,6 +709,73 @@ export default function SettingsPage() {
                                         onChange={() => settings.toggleSetting(option.id)}
                                     />
                                 ))}
+
+                                {/* Batch Size Configuration */}
+                                <div className="space-y-4 pt-6 border-t border-border">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <h3 className="text-lg font-medium flex items-center gap-2">
+                                                <Database className="w-4 h-4 text-primary" />
+                                                Batch Size Limit
+                                            </h3>
+                                            <p className="text-sm text-muted-foreground max-w-md mt-1">
+                                                Control how many states are processed in a single API call.
+                                                Lower values increase accuracy but take longer.
+                                            </p>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="text-2xl font-bold font-mono text-primary">
+                                                {settings.batchSize}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground block">
+                                                states/batch
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-6">
+                                        <div className="relative pt-6">
+                                            {/* Custom Range Slider */}
+                                            <input
+                                                type="range"
+                                                min="1"
+                                                max="50"
+                                                step="1"
+                                                value={settings.batchSize}
+                                                onChange={(e) => settings.setBatchSize(parseInt(e.target.value))}
+                                                className="w-full h-2 bg-muted rounded-full appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50 accent-primary"
+                                                style={{
+                                                    backgroundSize: `${((settings.batchSize - 1) * 100) / 49}% 100%`
+                                                }}
+                                            />
+                                            <div className="flex justify-between text-xs text-muted-foreground mt-2 font-medium">
+                                                <span>1 State (Max Quality)</span>
+                                                <span>25 States</span>
+                                                <span>50 States (Max Speed)</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="p-4 bg-muted/40 border border-border/50 rounded-lg text-sm">
+                                            <div className="flex items-start gap-3">
+                                                <div className="p-1.5 bg-primary/10 rounded-md mt-0.5">
+                                                    <Zap className="w-4 h-4 text-primary" />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <p className="font-medium text-foreground">
+                                                        Estimated Performance
+                                                    </p>
+                                                    <p className="text-muted-foreground leading-relaxed">
+                                                        {settings.batchSize === 50
+                                                            ? "Executes 1 massive API call. Fastest method, but LLMs may hallucinate details when processing 50 states at once."
+                                                            : settings.batchSize === 1
+                                                                ? "Executes 50 individual API calls. Extremely thorough and allows for real-time scraping per state, but much slower."
+                                                                : `Executes ${Math.ceil(50 / settings.batchSize)} batches of ~${settings.batchSize} states each. A balance between specficity and speed.`}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </motion.div>
                         )}
 

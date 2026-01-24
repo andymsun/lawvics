@@ -378,35 +378,45 @@ async function processChunk(
     useMockMode: boolean = DEFAULT_MOCK_MODE
 ): Promise<[number, number]> {
     const settings = useSettingsStore.getState();
-    const { dataSource } = settings;
+    const { dataSource, openaiApiKey } = settings;
     const surveyStore = useSurveyHistoryStore.getState();
 
     let successes = 0;
     let errors = 0;
 
-    // For LLM-based modes, use batch API (single call for all states in chunk)
+    // For LLM-based modes:
+    // If chunk has only 1 state, use individual fetch (enables scraping/proxy).
+    // If chunk has >1 state, use batch API (pure LLM generation, no scraping).
     if (dataSource === 'llm-scraper' || dataSource === 'scraping-proxy') {
-        try {
-            // Make ONE batch call for all states in chunk
-            const batchResults = await fetchBatchStatutes(stateCodes, query);
+        if (stateCodes.length === 1) {
+            // Single state -> Use scraping logic
+            const stateCode = stateCodes[0];
+            const result = await fetchStateStatute(stateCode, query, surveyId, useMockMode, openaiApiKey);
+            return result ? [1, 0] : [0, 1];
+        } else {
+            // Multiple states -> Use Batch LLM logic
+            try {
+                // Make ONE batch call for all states in chunk
+                const batchResults = await fetchBatchStatutes(stateCodes, query);
 
-            // Process results for each state
-            for (const stateCode of stateCodes) {
-                const statute = batchResults[stateCode];
-                if (statute) {
-                    surveyStore.setSessionStatute(surveyId, stateCode, statute);
-                    successes++;
-                } else {
-                    surveyStore.setSessionError(surveyId, stateCode, new Error(`No result returned for ${stateCode}`));
+                // Process results for each state
+                for (const stateCode of stateCodes) {
+                    const statute = batchResults[stateCode];
+                    if (statute) {
+                        surveyStore.setSessionStatute(surveyId, stateCode, statute);
+                        successes++;
+                    } else {
+                        surveyStore.setSessionError(surveyId, stateCode, new Error(`No result returned for ${stateCode}`));
+                        errors++;
+                    }
+                }
+            } catch (error) {
+                // Batch failed - mark all states as error
+                const errorObj = error instanceof Error ? error : new Error('Batch request failed');
+                for (const stateCode of stateCodes) {
+                    surveyStore.setSessionError(surveyId, stateCode, errorObj);
                     errors++;
                 }
-            }
-        } catch (error) {
-            // Batch failed - mark all states as error
-            const errorObj = error instanceof Error ? error : new Error('Batch request failed');
-            for (const stateCode of stateCodes) {
-                surveyStore.setSessionError(surveyId, stateCode, errorObj);
-                errors++;
             }
         }
     } else {
@@ -439,14 +449,7 @@ export class MaxConcurrentSurveysError extends Error {
 /**
  * Search all 50 states for statute data
  *
- * For LLM-based modes: Makes a SINGLE API call that returns all 50 states at once.
- * For mock/official-api: Uses chunked individual calls.
- *
- * @param userQuery - Natural language legal query
- * @param surveyId - The ID of the survey session (created by caller)
- * @param useMockMode - Whether to use mock data (true) or real scraping (false). Defaults to true.
- * @returns void
- * @throws MaxConcurrentSurveysError if 5 surveys already running
+ * Uses settings.batchSize to determine how many states to process in parallel/batch.
  */
 export async function searchAllStates(
     userQuery: string,
@@ -455,7 +458,7 @@ export async function searchAllStates(
 ): Promise<void> {
     const surveyStore = useSurveyHistoryStore.getState();
     const settingsStore = useSettingsStore.getState();
-    const { dataSource } = settingsStore;
+    const { batchSize } = settingsStore;
 
     // 1. Check concurrency limit
     const runningCount = surveyStore.surveys.filter(s => s.status === 'running').length;
@@ -463,42 +466,12 @@ export async function searchAllStates(
         throw new MaxConcurrentSurveysError();
     }
 
-    // For LLM-based modes: Use SINGLE API call for all 50 states
-    if (dataSource === 'llm-scraper' || dataSource === 'scraping-proxy') {
-        try {
-            const results = await fetchAllStatesAtOnce(userQuery);
-
-            let successes = 0;
-            let errors = 0;
-
-            // Distribute results to each state
-            for (const stateCode of ALL_STATE_CODES) {
-                const statute = results[stateCode];
-                if (statute && statute.citation !== 'Unknown') {
-                    surveyStore.setSessionStatute(surveyId, stateCode, statute);
-                    successes++;
-                } else {
-                    surveyStore.setSessionError(surveyId, stateCode, new Error(statute?.textSnippet || 'No result'));
-                    errors++;
-                }
-            }
-
-            surveyStore.completeSurvey(surveyId, successes, errors);
-        } catch (error) {
-            // Single call failed - mark all states as error
-            const errorObj = error instanceof Error ? error : new Error('API call failed');
-            for (const stateCode of ALL_STATE_CODES) {
-                surveyStore.setSessionError(surveyId, stateCode, errorObj);
-            }
-            surveyStore.completeSurvey(surveyId, 0, 50);
-        }
-        return;
-    }
-
-    // For mock/official-api: Use chunked individual calls (existing behavior)
+    // 2. Process in chunks based on batchSize setting
     let totalSuccesses = 0;
     let totalErrors = 0;
-    const chunks = chunkArray(ALL_STATE_CODES, CHUNK_SIZE);
+
+    // Chunk the 50 states according to user preference (1 to 50)
+    const chunks = chunkArray(ALL_STATE_CODES, batchSize);
 
     for (const chunk of chunks) {
         const currentSurvey = useSurveyHistoryStore.getState().surveys.find(s => s.id === surveyId);
@@ -511,7 +484,10 @@ export async function searchAllStates(
         totalSuccesses += successes;
         totalErrors += errors;
 
-        await new Promise(resolve => setTimeout(resolve, INTER_CHUNK_DELAY_MS));
+        // Small delay between chunks to prevent overwhelming browser/network if batchSize is small
+        if (chunks.length > 1) {
+            await new Promise(resolve => setTimeout(resolve, INTER_CHUNK_DELAY_MS));
+        }
     }
 
     const finalSurvey = useSurveyHistoryStore.getState().surveys.find(s => s.id === surveyId);

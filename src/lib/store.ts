@@ -362,7 +362,10 @@ export interface SettingsState {
     /** Selected Gemini model */
     geminiModel: string;
     /** Selected OpenRouter model */
+    /** Selected OpenRouter model */
     openRouterModel: string;
+    /** Batch size for queries (1-50) */
+    batchSize: number;
 }
 
 interface SettingsActions {
@@ -389,10 +392,12 @@ interface SettingsActions {
     setGeminiModel: (model: string) => void;
     /** Set the OpenRouter model */
     setOpenRouterModel: (model: string) => void;
+    /** Set the batch size */
+    setBatchSize: (size: number) => void;
     /** Update any boolean setting */
-    setSetting: <K extends keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openRouterApiKey' | 'openStatesApiKey' | 'legiscanApiKey' | 'scrapingApiKey' | 'themeColor' | 'openaiModel' | 'geminiModel' | 'openRouterModel' | 'activeAiProvider'>>(key: K, value: SettingsState[K]) => void;
+    setSetting: <K extends keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openRouterApiKey' | 'openStatesApiKey' | 'legiscanApiKey' | 'scrapingApiKey' | 'themeColor' | 'openaiModel' | 'geminiModel' | 'openRouterModel' | 'activeAiProvider' | 'batchSize'>>(key: K, value: SettingsState[K]) => void;
     /** Toggle a boolean setting */
-    toggleSetting: (key: keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openRouterApiKey' | 'openStatesApiKey' | 'legiscanApiKey' | 'scrapingApiKey' | 'themeColor' | 'openaiModel' | 'geminiModel' | 'openRouterModel' | 'activeAiProvider'>) => void;
+    toggleSetting: (key: keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openRouterApiKey' | 'openStatesApiKey' | 'legiscanApiKey' | 'scrapingApiKey' | 'themeColor' | 'openaiModel' | 'geminiModel' | 'openRouterModel' | 'activeAiProvider' | 'batchSize'>) => void;
     /** Set the theme color */
     setThemeColor: (color: ThemeColor) => void;
 }
@@ -416,6 +421,7 @@ const DEFAULT_SETTINGS: SettingsState = {
     openaiModel: 'gpt-4o-mini',
     geminiModel: 'gemini-1.5-flash',
     openRouterModel: 'openai/gpt-4o-mini',
+    batchSize: 50,
 };
 
 /**
@@ -461,6 +467,7 @@ function persistSettings(settings: SettingsState): void {
             openaiModel: settings.openaiModel,
             geminiModel: settings.geminiModel,
             openRouterModel: settings.openRouterModel,
+            batchSize: settings.batchSize,
         };
         localStorage.setItem('lawvics-settings', JSON.stringify(stateToPersist));
     } catch {
@@ -523,6 +530,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
     setOpenRouterModel: (model) => {
         set({ openRouterModel: model });
+        persistSettings(get());
+    },
+
+    setBatchSize: (size) => {
+        set({ batchSize: size });
         persistSettings(get());
     },
 

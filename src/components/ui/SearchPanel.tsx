@@ -94,7 +94,7 @@ export default function SearchPanel() {
 
             {/* Error toast */}
             {error && (
-                <div className="mt-3 flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-600 dark:text-red-400 rounded-lg text-sm">
+                <div className="mt-3 flex items-center gap-2 px-4 py-2 bg-error/10 text-error rounded-lg text-sm">
                     <AlertCircle className="w-4 h-4" />
                     {error}
                 </div>
