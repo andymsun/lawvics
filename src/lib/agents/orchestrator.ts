@@ -20,6 +20,24 @@ const INTER_CHUNK_DELAY_MS = 1500;
 const DEFAULT_MOCK_MODE = true;
 
 // ============================================================
+// Debug Logger (client-side, checks localStorage)
+// ============================================================
+
+function isDebugMode(): boolean {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('lawvics-debug') === 'true';
+}
+
+const debug = {
+    log: (...args: unknown[]) => isDebugMode() && console.log('[Orchestrator]', ...args),
+    error: (...args: unknown[]) => isDebugMode() && console.error('[Orchestrator]', ...args),
+    time: (label: string) => isDebugMode() && console.time(`[Orchestrator] ${label}`),
+    timeEnd: (label: string) => isDebugMode() && console.timeEnd(`[Orchestrator] ${label}`),
+    group: (label: string) => isDebugMode() && console.group(`[Orchestrator] ${label}`),
+    groupEnd: () => isDebugMode() && console.groupEnd(),
+};
+
+// ============================================================
 // Internal API Client
 // ============================================================
 
@@ -92,34 +110,62 @@ async function fetchStatuteFromApi(
     openaiApiKey: string = '' // Deprecated argument
 ): Promise<Statute> {
     const settings = useSettingsStore.getState();
-    const { dataSource, openaiApiKey: storeOpenAiKey, geminiApiKey, openStatesApiKey, legiscanApiKey, scrapingApiKey } = settings;
+    const { dataSource, openaiApiKey: storeOpenAiKey, geminiApiKey, openRouterApiKey, openStatesApiKey, legiscanApiKey, scrapingApiKey } = settings;
 
     // 1. STRICT CLIENT-SIDE MOCK GUARD
     // If we are in mock mode, DO NOT attempt to hit the API at all.
     if (dataSource === 'mock') {
+        debug.log(`[${stateCode}] Using client-side mock`);
         return mockFetchStatute(stateCode, query);
     }
 
     // 2. Real Mode (LLM Scraper or Official API)
+    // Determine which model to use based on provider
+    let aiModel: string;
+    if (settings.activeAiProvider === 'openrouter') {
+        aiModel = settings.openRouterModel;
+    } else if (settings.activeAiProvider === 'gemini') {
+        aiModel = settings.geminiModel;
+    } else {
+        aiModel = settings.openaiModel;
+    }
+
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'x-data-source': dataSource,
         'x-active-provider': settings.activeAiProvider,
-        'x-ai-model': settings.activeAiProvider === 'openai' ? settings.openaiModel : settings.geminiModel
+        'x-ai-model': aiModel
     };
+
+    // Enable server-side debug if client-side debug is on
+    if (isDebugMode()) {
+        headers['x-debug-mode'] = 'true';
+    }
 
     // Attach keys based on selected source
     if (dataSource === 'llm-scraper') {
         if (storeOpenAiKey) headers['x-openai-key'] = storeOpenAiKey;
         if (geminiApiKey) headers['x-gemini-key'] = geminiApiKey;
+        if (openRouterApiKey) headers['x-openrouter-key'] = openRouterApiKey;
     } else if (dataSource === 'scraping-proxy') {
         if (scrapingApiKey) headers['x-scraping-key'] = scrapingApiKey;
         if (storeOpenAiKey) headers['x-openai-key'] = storeOpenAiKey;
         if (geminiApiKey) headers['x-gemini-key'] = geminiApiKey;
+        if (openRouterApiKey) headers['x-openrouter-key'] = openRouterApiKey;
     } else if (dataSource === 'official-api') {
         if (openStatesApiKey) headers['x-openstates-key'] = openStatesApiKey;
         if (legiscanApiKey) headers['x-legiscan-key'] = legiscanApiKey;
     }
+
+    debug.log(`[${stateCode}] Fetching with headers:`, {
+        dataSource,
+        hasOpenAI: !!storeOpenAiKey,
+        hasGemini: !!geminiApiKey,
+        hasOpenRouter: !!openRouterApiKey,
+        hasOpenStates: !!openStatesApiKey,
+        hasLegiscan: !!legiscanApiKey
+    });
+    debug.time(`fetch-${stateCode}`);
 
     try {
         const response = await fetch('/api/statute/search', {
@@ -133,16 +179,22 @@ async function fetchStatuteFromApi(
             }),
         });
 
+        debug.timeEnd(`fetch-${stateCode}`);
+        debug.log(`[${stateCode}] Response status:`, response.status);
+
         if (response.status === 404) {
+            debug.error(`[${stateCode}] 404 - API route not found`);
             throw new Error('Real Mode requires a backend server. Please run locally with `npm run dev`.');
         }
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
+            debug.error(`[${stateCode}] Error response:`, errorData);
             throw new Error(errorData.error || `API request failed for ${stateCode}: ${response.statusText}`);
         }
 
         const result: SearchApiResponse = await response.json();
+        debug.log(`[${stateCode}] Result:`, { success: result.success, citation: result.data?.citation });
 
         if (!result.success || !result.data) {
             throw new Error(result.error || `Failed to fetch statute for ${stateCode}`);
@@ -150,6 +202,7 @@ async function fetchStatuteFromApi(
 
         return result.data;
     } catch (error) {
+        debug.error(`[${stateCode}] Fetch error:`, error);
         throw error;
     }
 }
@@ -174,16 +227,27 @@ async function fetchBatchStatutes(
     query: string
 ): Promise<Record<string, Statute>> {
     const settings = useSettingsStore.getState();
-    const { openaiApiKey, geminiApiKey, activeAiProvider, openaiModel, geminiModel } = settings;
+    const { openaiApiKey, geminiApiKey, openRouterApiKey, activeAiProvider, openaiModel, geminiModel, openRouterModel } = settings;
+
+    // Determine which model to use based on provider
+    let aiModel: string;
+    if (activeAiProvider === 'openrouter') {
+        aiModel = openRouterModel;
+    } else if (activeAiProvider === 'gemini') {
+        aiModel = geminiModel;
+    } else {
+        aiModel = openaiModel;
+    }
 
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'x-active-provider': activeAiProvider,
-        'x-ai-model': activeAiProvider === 'openai' ? openaiModel : geminiModel
+        'x-ai-model': aiModel
     };
 
     if (openaiApiKey) headers['x-openai-key'] = openaiApiKey;
     if (geminiApiKey) headers['x-gemini-key'] = geminiApiKey;
+    if (openRouterApiKey) headers['x-openrouter-key'] = openRouterApiKey;
 
     const response = await fetch('/api/statute/batch', {
         method: 'POST',
@@ -251,13 +315,23 @@ async function fetchStateStatute(
         // 2. Optional Auto-Verification (Paranoid Mode)
         if (settings.autoVerify && !useMockMode) {
             try {
+                // Determine which model to use for verification
+                let verificationModel: string;
+                if (settings.activeAiProvider === 'openrouter') {
+                    verificationModel = settings.openRouterModel;
+                } else if (settings.activeAiProvider === 'gemini') {
+                    verificationModel = settings.geminiModel;
+                } else {
+                    verificationModel = settings.openaiModel;
+                }
+
                 const verification = await verifyStatuteV2(
                     statute,
                     query,
                     false, // Real verification
-                    { openai: settings.openaiApiKey, gemini: settings.geminiApiKey },
+                    { openai: settings.openaiApiKey, gemini: settings.geminiApiKey, openrouter: settings.openRouterApiKey },
                     settings.activeAiProvider,
-                    settings.activeAiProvider === 'openai' ? settings.openaiModel : settings.geminiModel
+                    verificationModel
                 );
 
                 // Update statute with verification results
@@ -462,16 +536,27 @@ interface AllStatesApiResponse {
  */
 async function fetchAllStatesAtOnce(query: string): Promise<Record<string, Statute>> {
     const settings = useSettingsStore.getState();
-    const { openaiApiKey, geminiApiKey, activeAiProvider, openaiModel, geminiModel } = settings;
+    const { openaiApiKey, geminiApiKey, openRouterApiKey, activeAiProvider, openaiModel, geminiModel, openRouterModel } = settings;
+
+    // Determine which model to use based on provider
+    let aiModel: string;
+    if (activeAiProvider === 'openrouter') {
+        aiModel = openRouterModel;
+    } else if (activeAiProvider === 'gemini') {
+        aiModel = geminiModel;
+    } else {
+        aiModel = openaiModel;
+    }
 
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'x-active-provider': activeAiProvider,
-        'x-ai-model': activeAiProvider === 'openai' ? openaiModel : geminiModel
+        'x-ai-model': aiModel
     };
 
     if (openaiApiKey) headers['x-openai-key'] = openaiApiKey;
     if (geminiApiKey) headers['x-gemini-key'] = geminiApiKey;
+    if (openRouterApiKey) headers['x-openrouter-key'] = openRouterApiKey;
 
     const response = await fetch('/api/statute/all-states', {
         method: 'POST',

@@ -32,7 +32,8 @@ export default function SearchPanel() {
                 const quotaResult = await runQuotaCheck(
                     settings.activeAiProvider,
                     settings.openaiApiKey,
-                    settings.geminiApiKey
+                    settings.geminiApiKey,
+                    settings.openRouterApiKey
                 );
 
                 if (!quotaResult.ok) {

@@ -8,7 +8,7 @@
 
 interface QuotaCheckResult {
     ok: boolean;
-    provider: 'openai' | 'gemini';
+    provider: 'openai' | 'gemini' | 'openrouter';
     message: string;
     retryAfterMs?: number;
 }
@@ -95,16 +95,60 @@ export async function checkOpenAIQuota(apiKey: string): Promise<QuotaCheckResult
 }
 
 /**
+ * Check if OpenRouter API key has available quota.
+ * OpenRouter uses OpenAI-compatible API.
+ */
+export async function checkOpenRouterQuota(apiKey: string): Promise<QuotaCheckResult> {
+    if (!apiKey) {
+        return { ok: false, provider: 'openrouter', message: 'No OpenRouter API key provided' };
+    }
+
+    try {
+        const res = await fetch('https://openrouter.ai/api/v1/models', {
+            headers: { 'Authorization': `Bearer ${apiKey}` }
+        });
+
+        if (res.status === 429) {
+            return {
+                ok: false,
+                provider: 'openrouter',
+                message: 'OpenRouter API rate limited. Wait a moment or check your credits.',
+                retryAfterMs: 60000
+            };
+        }
+
+        if (res.status === 401) {
+            return { ok: false, provider: 'openrouter', message: 'Invalid OpenRouter API key' };
+        }
+
+        if (res.status === 402) {
+            return { ok: false, provider: 'openrouter', message: 'OpenRouter credits exhausted - add credits to your account' };
+        }
+
+        if (!res.ok) {
+            return { ok: false, provider: 'openrouter', message: `OpenRouter API error: ${res.statusText}` };
+        }
+
+        return { ok: true, provider: 'openrouter', message: 'OpenRouter API ready' };
+    } catch (error) {
+        return { ok: false, provider: 'openrouter', message: `OpenRouter check failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+    }
+}
+
+/**
  * Run pre-flight quota check based on current settings.
  * Returns the check result for the active provider.
  */
 export async function runQuotaCheck(
-    activeProvider: 'openai' | 'gemini',
+    activeProvider: 'openai' | 'gemini' | 'openrouter',
     openaiKey: string,
-    geminiKey: string
+    geminiKey: string,
+    openRouterKey?: string
 ): Promise<QuotaCheckResult> {
     if (activeProvider === 'gemini') {
         return checkGeminiQuota(geminiKey);
+    } else if (activeProvider === 'openrouter') {
+        return checkOpenRouterQuota(openRouterKey || '');
     } else {
         return checkOpenAIQuota(openaiKey);
     }

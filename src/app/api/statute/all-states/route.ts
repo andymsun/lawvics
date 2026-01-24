@@ -9,6 +9,19 @@ import { z } from 'zod';
 export const runtime = 'edge';
 
 // ============================================================
+// Debug Logger
+// ============================================================
+
+function createDebugLogger(enabled: boolean) {
+    return {
+        log: (...args: unknown[]) => enabled && console.log('[DEBUG][all-states]', ...args),
+        error: (...args: unknown[]) => enabled && console.error('[DEBUG][all-states]', ...args),
+        time: (label: string) => enabled && console.time(`[DEBUG][all-states] ${label}`),
+        timeEnd: (label: string) => enabled && console.timeEnd(`[DEBUG][all-states] ${label}`),
+    };
+}
+
+// ============================================================
 // All 50 State Codes
 // ============================================================
 
@@ -38,7 +51,22 @@ interface AllStatesResponse {
 // AI Model Factory
 // ============================================================
 
-function getModel(keys: { openai?: string; gemini?: string }, providerPreference: 'openai' | 'gemini', modelName?: string) {
+type AiProvider = 'openai' | 'gemini' | 'openrouter';
+
+function getModel(
+    keys: { openai?: string; gemini?: string; openrouter?: string },
+    providerPreference: AiProvider,
+    modelName?: string
+) {
+    // OpenRouter - uses OpenAI-compatible API
+    if (providerPreference === 'openrouter' && keys.openrouter) {
+        const provider = createOpenAI({
+            apiKey: keys.openrouter,
+            baseURL: 'https://openrouter.ai/api/v1',
+        });
+        return provider(modelName || 'openai/gpt-4o-mini');
+    }
+
     if (providerPreference === 'openai' && keys.openai) {
         const provider = createOpenAI({ apiKey: keys.openai });
         return provider(modelName || 'gpt-4o-mini');
@@ -48,6 +76,14 @@ function getModel(keys: { openai?: string; gemini?: string }, providerPreference
         return provider(modelName || 'gemini-1.5-flash');
     }
 
+    // Fallback logic
+    if (keys.openrouter) {
+        const provider = createOpenAI({
+            apiKey: keys.openrouter,
+            baseURL: 'https://openrouter.ai/api/v1',
+        });
+        return provider('openai/gpt-4o-mini');
+    }
     if (keys.openai) return createOpenAI({ apiKey: keys.openai })('gpt-4o-mini');
     if (keys.gemini) return createGoogleGenerativeAI({ apiKey: keys.gemini })('gemini-1.5-flash');
 
@@ -100,24 +136,31 @@ PRIORITY: Accuracy over completeness. "Unknown" is better than wrong.`;
 
 async function processAllStates(
     query: string,
-    keys: { openai?: string; gemini?: string },
-    activeProvider: 'openai' | 'gemini',
+    keys: { openai?: string; gemini?: string; openrouter?: string },
+    activeProvider: AiProvider,
     aiModel?: string
 ): Promise<Record<string, Statute>> {
     const model = getModel(keys, activeProvider, aiModel);
 
     const stateList = ALL_STATES.join(', ');
 
-    const { object } = await generateObject({
-        model,
-        schema: AllStatesSchema,
-        system: SYSTEM_PROMPT,
-        prompt: `USER QUERY: "${query}"
+    // Wrap generateObject in a timeout promise (120s for all 50 states)
+    const llmTimeout = 120000;
+    const llmResult = await Promise.race([
+        generateObject({
+            model,
+            schema: AllStatesSchema,
+            system: SYSTEM_PROMPT,
+            prompt: `USER QUERY: "${query}"
 
 Provide statute information for ALL 50 US states: ${stateList}
 
 Return one result object for each state with the relevant statute citation, limitation period, and confidence score.`,
-    });
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('LLM request timed out after 120 seconds')), llmTimeout))
+    ]) as { object: z.infer<typeof AllStatesSchema> };
+
+    const { object } = llmResult;
 
     // Convert array to map
     const resultMap: Record<string, Statute> = {};
@@ -154,35 +197,65 @@ Return one result object for each state with the relevant statute citation, limi
 // ============================================================
 
 export async function POST(request: NextRequest): Promise<NextResponse<AllStatesResponse>> {
+    const debugMode = request.headers.get('x-debug-mode') === 'true' || process.env.DEBUG_MODE === 'true';
+    const debug = createDebugLogger(debugMode);
+
+    debug.log('=== ALL-STATES REQUEST START ===');
+    debug.time('all-states-total');
+
     try {
         const body: AllStatesRequest = await request.json();
         const { query } = body;
 
+        debug.log('Query:', query?.substring(0, 50) + '...');
+
         if (!query) {
+            debug.error('Missing query in request');
             return NextResponse.json({ success: false, error: 'Missing query' }, { status: 400 });
         }
 
         const openaiApiKey = request.headers.get('x-openai-key') || undefined;
         const geminiApiKey = request.headers.get('x-gemini-key') || undefined;
-        const activeProvider = request.headers.get('x-active-provider') as 'openai' | 'gemini' | null;
+        const openRouterApiKey = request.headers.get('x-openrouter-key') || undefined;
+        const activeProvider = request.headers.get('x-active-provider') as AiProvider | null;
         const aiModel = request.headers.get('x-ai-model') || undefined;
 
-        if (!openaiApiKey && !geminiApiKey) {
-            return NextResponse.json({ success: false, error: 'No API key provided (OpenAI or Gemini required)' }, { status: 400 });
-        }
+        debug.log('API Keys:', {
+            hasOpenAI: !!openaiApiKey,
+            hasGemini: !!geminiApiKey,
+            hasOpenRouter: !!openRouterApiKey,
+            activeProvider,
+            aiModel
+        });
 
+        // Note: API key validation handled in getModel() - throws descriptive error if keys needed but missing
+
+        // Determine provider based on available keys
+        const detectedProvider: AiProvider = activeProvider ||
+            (openRouterApiKey ? 'openrouter' : openaiApiKey ? 'openai' : 'gemini');
+
+        debug.time('llm-call');
         const results = await processAllStates(
             query,
-            { openai: openaiApiKey, gemini: geminiApiKey },
-            activeProvider || (openaiApiKey ? 'openai' : 'gemini'),
+            { openai: openaiApiKey, gemini: geminiApiKey, openrouter: openRouterApiKey },
+            detectedProvider,
             aiModel
         );
+        debug.timeEnd('llm-call');
+
+        debug.log('Results:', { statesReturned: Object.keys(results).length });
+        debug.log('=== ALL-STATES REQUEST SUCCESS ===');
+        debug.timeEnd('all-states-total');
 
         return NextResponse.json({ success: true, data: results });
     } catch (error) {
-        console.error('All-states search error:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Internal Server Error';
+        console.error('[all-states] Error:', errorMessage);
+        if (debugMode) {
+            console.error('[DEBUG][all-states] Full error:', error);
+        }
         return NextResponse.json(
-            { success: false, error: error instanceof Error ? error.message : 'Internal Server Error' },
+            { success: false, error: errorMessage },
             { status: 500 }
         );
     }

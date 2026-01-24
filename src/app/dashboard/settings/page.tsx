@@ -409,6 +409,17 @@ export default function SettingsPage() {
         return key.length > 5;
     };
 
+    const testOpenRouterKey = async (key: string) => {
+        try {
+            const res = await fetch('https://openrouter.ai/api/v1/models', {
+                headers: { Authorization: `Bearer ${key}` }
+            });
+            return res.ok;
+        } catch {
+            return false;
+        }
+    };
+
     return (
         <div className="h-full flex flex-col p-6 space-y-6">
             {/* Header */}
@@ -496,18 +507,37 @@ export default function SettingsPage() {
                                             >
                                                 Gemini
                                             </button>
+                                            <button
+                                                onClick={() => settings.setActiveAiProvider('openrouter')}
+                                                className={cn(
+                                                    "px-4 py-1.5 rounded-md text-sm font-medium transition-all",
+                                                    settings.activeAiProvider === 'openrouter'
+                                                        ? "bg-background text-foreground shadow-sm"
+                                                        : "text-muted-foreground hover:text-foreground"
+                                                )}
+                                            >
+                                                OpenRouter
+                                            </button>
                                         </div>
 
                                         {/* Model Dropdown based on Provider */}
                                         <div className="space-y-3">
                                             <label className="text-sm font-medium">Model Selection</label>
                                             <select
-                                                value={settings.activeAiProvider === 'openai' ? settings.openaiModel : settings.geminiModel}
+                                                value={
+                                                    settings.activeAiProvider === 'openai'
+                                                        ? settings.openaiModel
+                                                        : settings.activeAiProvider === 'gemini'
+                                                            ? settings.geminiModel
+                                                            : settings.openRouterModel
+                                                }
                                                 onChange={(e) => {
                                                     if (settings.activeAiProvider === 'openai') {
                                                         settings.setOpenaiModel(e.target.value);
-                                                    } else {
+                                                    } else if (settings.activeAiProvider === 'gemini') {
                                                         settings.setGeminiModel(e.target.value);
+                                                    } else {
+                                                        settings.setOpenRouterModel(e.target.value);
                                                     }
                                                 }}
                                                 className="w-full max-w-xs px-3 py-2 bg-muted border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
@@ -518,7 +548,7 @@ export default function SettingsPage() {
                                                         <option value="gpt-4o-mini">GPT-4o-mini (Cost-Efficient)</option>
                                                         <option value="o1-mini">o1-mini (Reasoning)</option>
                                                     </>
-                                                ) : (
+                                                ) : settings.activeAiProvider === 'gemini' ? (
                                                     <>
                                                         <option value="gemini-2.5-pro-preview-05-06">Gemini 2.5 Pro (Latest)</option>
                                                         <option value="gemini-2.5-flash-preview-04-17">Gemini 2.5 Flash (Latest)</option>
@@ -527,8 +557,23 @@ export default function SettingsPage() {
                                                         <option value="gemini-1.5-pro">Gemini 1.5 Pro (High Context)</option>
                                                         <option value="gemini-1.5-flash">Gemini 1.5 Flash (1M Tokens)</option>
                                                     </>
+                                                ) : (
+                                                    <>
+                                                        <option value="openai/gpt-4o-mini">OpenAI GPT-4o-mini (Budget)</option>
+                                                        <option value="openai/gpt-4o">OpenAI GPT-4o (Premium)</option>
+                                                        <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+                                                        <option value="anthropic/claude-3-haiku">Claude 3 Haiku (Fast)</option>
+                                                        <option value="google/gemini-pro-1.5">Gemini Pro 1.5</option>
+                                                        <option value="meta-llama/llama-3.1-70b-instruct">Llama 3.1 70B</option>
+                                                        <option value="mistralai/mistral-large">Mistral Large</option>
+                                                    </>
                                                 )}
                                             </select>
+                                            {settings.activeAiProvider === 'openrouter' && (
+                                                <p className="text-xs text-muted-foreground">
+                                                    Or enter any model ID from <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">openrouter.ai/models</a>
+                                                </p>
+                                            )}
                                         </div>
 
                                         <ApiKeyInput
@@ -549,6 +594,16 @@ export default function SettingsPage() {
                                             getKeyUrl="https://aistudio.google.com/app/apikey"
                                             onTest={testGeminiKey}
                                             required={settings.activeAiProvider === 'gemini'}
+                                        />
+                                        <ApiKeyInput
+                                            label="OpenRouter API Key"
+                                            value={settings.openRouterApiKey}
+                                            onChange={settings.setOpenRouterApiKey}
+                                            helperText="Access 200+ models via one API. Great for Claude, Llama, Mistral, etc."
+                                            placeholder="sk-or-v1-..."
+                                            getKeyUrl="https://openrouter.ai/keys"
+                                            onTest={testOpenRouterKey}
+                                            required={settings.activeAiProvider === 'openrouter'}
                                         />
 
                                         <div className="pt-4 border-t border-border/50">
