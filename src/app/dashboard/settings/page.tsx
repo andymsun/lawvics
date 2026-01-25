@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, Zap, AlertTriangle, Key, Eye, EyeOff, Database, Bot, Globe, Monitor, Moon, Sun, Layout, Sliders, ExternalLink, Check, Loader2, X, Lock, Unlock } from 'lucide-react';
+import { Settings, Zap, AlertTriangle, Key, Eye, EyeOff, Database, Bot, Globe, Monitor, Moon, Sun, Layout, Sliders, ExternalLink, Check, Loader2, X, Lock, Unlock, Cloud } from 'lucide-react';
 import { useSettingsStore, DataSource, SettingsStore } from '@/lib/store';
 import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
@@ -284,6 +284,12 @@ const DataSourceSelector = () => {
             icon: Database,
             label: 'Official APIs',
             description: 'Open States or LegiScan data. Fast, accurate, and structured.'
+        },
+        {
+            id: 'system-api',
+            icon: Cloud,
+            label: 'System API (Recommended)',
+            description: 'Uses pre-configured server-side API keys. No setup needed.'
         }
     ];
 

@@ -380,7 +380,7 @@ export const useLegalStore = create<LegalStore & StoreActions>((set) => ({
 // Settings Store (useSettingsStore)
 // ============================================================
 
-export type DataSource = 'mock' | 'llm-scraper' | 'official-api' | 'scraping-proxy';
+export type DataSource = 'mock' | 'llm-scraper' | 'official-api' | 'scraping-proxy' | 'system-api';
 export type ThemeColor = 'blue' | 'violet' | 'green' | 'rose' | 'orange';
 
 export interface SettingsState {
@@ -458,7 +458,7 @@ interface SettingsActions {
 export type SettingsStore = SettingsState & SettingsActions;
 
 const DEFAULT_SETTINGS: SettingsState = {
-    dataSource: 'mock',
+    dataSource: 'system-api',
     openaiApiKey: '',
     geminiApiKey: '',
     openRouterApiKey: '',
@@ -474,7 +474,7 @@ const DEFAULT_SETTINGS: SettingsState = {
     openaiModel: 'gpt-4o-mini',
     geminiModel: 'gemini-1.5-flash',
     openRouterModel: 'openai/gpt-4o-mini',
-    batchSize: 50,
+    batchSize: 10,
 };
 
 /**

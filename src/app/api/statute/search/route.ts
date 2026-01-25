@@ -483,13 +483,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
             return NextResponse.json({ success: false, error: 'Missing stateCode or query' }, { status: 400 });
         }
 
-        const dataSource = request.headers.get('x-data-source') || 'mock';
-        const openaiApiKey = request.headers.get('x-openai-key') || undefined;
-        const geminiApiKey = request.headers.get('x-gemini-key') || undefined;
-        const openRouterApiKey = request.headers.get('x-openrouter-key') || undefined;
-        const openStatesApiKey = request.headers.get('x-openstates-key') || undefined;
-        const legiscanApiKey = request.headers.get('x-legiscan-key') || undefined;
-        const scrapingApiKey = request.headers.get('x-scraping-key') || undefined;
+        const dataSource = request.headers.get('x-data-source') || 'system-api';
+        // Read from headers, or fall back to environment variables (for system-api mode)
+        const openaiApiKey = request.headers.get('x-openai-key') || process.env.OPENAI_API_KEY || undefined;
+        const geminiApiKey = request.headers.get('x-gemini-key') || process.env.GOOGLE_GENERATIVE_AI_API_KEY || undefined;
+        const openRouterApiKey = request.headers.get('x-openrouter-key') || process.env.OPENROUTER_API_KEY || undefined;
+        const openStatesApiKey = request.headers.get('x-openstates-key') || process.env.OPENSTATES_API_KEY || undefined;
+        const legiscanApiKey = request.headers.get('x-legiscan-key') || process.env.LEGISCAN_API_KEY || undefined;
+        const scrapingApiKey = request.headers.get('x-scraping-key') || process.env.ZENROWS_API_KEY || process.env.SCRAPINGBEE_API_KEY || undefined;
         const activeProvider = request.headers.get('x-active-provider') as AiProvider | null;
         const aiModel = request.headers.get('x-ai-model') || undefined;
 
