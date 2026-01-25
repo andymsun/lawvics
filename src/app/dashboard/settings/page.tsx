@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, Zap, AlertTriangle, Key, Eye, EyeOff, Database, Bot, Globe, Monitor, Moon, Sun, Layout, Sliders, ExternalLink, Check, Loader2, X } from 'lucide-react';
+import { Settings, Zap, AlertTriangle, Key, Eye, EyeOff, Database, Bot, Globe, Monitor, Moon, Sun, Layout, Sliders, ExternalLink, Check, Loader2, X, Lock, Unlock } from 'lucide-react';
 import { useSettingsStore, DataSource, SettingsStore } from '@/lib/store';
 import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
@@ -354,9 +354,11 @@ interface ModelSelectorProps {
     testOpenAIKey: (key: string) => Promise<boolean>;
     testGeminiKey: (key: string) => Promise<boolean>;
     testOpenRouterKey: (key: string) => Promise<boolean>;
+    isUnlocked: boolean;
+    onUnlock: () => void;
 }
 
-const ModelSelector = ({ settings, testOpenAIKey, testGeminiKey, testOpenRouterKey }: ModelSelectorProps) => {
+const ModelSelector = ({ settings, testOpenAIKey, testGeminiKey, testOpenRouterKey, isUnlocked, onUnlock }: ModelSelectorProps) => {
     // Determine which models list to use based on active provider
     const getModelsList = () => {
         switch (settings.activeAiProvider) {
@@ -417,6 +419,7 @@ const ModelSelector = ({ settings, testOpenAIKey, testGeminiKey, testOpenRouterK
     }, [settings.activeAiProvider, modelsList, currentModel]);
 
     const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        if (!isUnlocked) return;
         const value = e.target.value;
         if (value === 'custom') {
             // User selected "Custom" - show the input
@@ -490,11 +493,18 @@ const ModelSelector = ({ settings, testOpenAIKey, testGeminiKey, testOpenRouterK
         <div className="space-y-4">
             {/* Model Selection */}
             <div className="space-y-3">
-                <label className="text-sm font-medium">Model Selection</label>
+                <label className="text-sm font-medium flex items-center gap-2">
+                    Model Selection
+                    {!isUnlocked && <Lock className="w-3 h-3 text-muted-foreground" />}
+                </label>
                 <select
                     value={selectValue}
                     onChange={handleSelectChange}
-                    className="w-full max-w-xs px-3 py-2 bg-muted border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    disabled={!isUnlocked}
+                    className={cn(
+                        "w-full max-w-xs px-3 py-2 bg-muted border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary",
+                        !isUnlocked && "opacity-50 cursor-not-allowed"
+                    )}
                 >
                     {modelsList.map((model) => (
                         <option key={model.value} value={model.value}>
@@ -530,16 +540,36 @@ const ModelSelector = ({ settings, testOpenAIKey, testGeminiKey, testOpenRouterK
             </div>
 
             {/* Single API Key Input based on Provider */}
-            <ApiKeyInput
-                label={apiKeyConfig.label}
-                value={apiKeyConfig.value}
-                onChange={apiKeyConfig.onChange}
-                helperText={apiKeyConfig.helperText}
-                placeholder={apiKeyConfig.placeholder}
-                getKeyUrl={apiKeyConfig.getKeyUrl}
-                onTest={apiKeyConfig.onTest}
-                required={true}
-            />
+            {!isUnlocked ? (
+                <div className="p-4 rounded-lg bg-muted/50 border border-border flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-primary/10 rounded-full">
+                            <Lock className="w-4 h-4 text-primary" />
+                        </div>
+                        <div>
+                            <div className="text-sm font-medium">Managed API Mode</div>
+                            <div className="text-xs text-muted-foreground">Using system-provided API keys</div>
+                        </div>
+                    </div>
+                    <button
+                        onClick={onUnlock}
+                        className="text-xs font-medium text-primary hover:underline"
+                    >
+                        Unlock Admin Settings
+                    </button>
+                </div>
+            ) : (
+                <ApiKeyInput
+                    label={apiKeyConfig.label}
+                    value={apiKeyConfig.value}
+                    onChange={apiKeyConfig.onChange}
+                    helperText={apiKeyConfig.helperText}
+                    placeholder={apiKeyConfig.placeholder}
+                    getKeyUrl={apiKeyConfig.getKeyUrl}
+                    onTest={apiKeyConfig.onTest}
+                    required={true}
+                />
+            )}
         </div>
     );
 };
@@ -554,6 +584,68 @@ export default function SettingsPage() {
     const settings = useSettingsStore();
     const { theme, setTheme } = useTheme();
     const [activeTab, setActiveTab] = useState<TabType>('datasource');
+    const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
+    const [showUnlockModal, setShowUnlockModal] = useState(false);
+    const [unlockPassword, setUnlockPassword] = useState('');
+
+    const handleUnlockSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (unlockPassword === 'admin') {
+            setIsAdminUnlocked(true);
+            setShowUnlockModal(false);
+            toast.success('Admin Mode Unlocked');
+        } else {
+            toast.error('Incorrect Password');
+        }
+    };
+
+    const UnlockModal = () => (
+        <AnimatePresence>
+            {showUnlockModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="w-full max-w-sm bg-background border border-border rounded-xl shadow-xl p-6"
+                    >
+                        <div className="text-center mb-6">
+                            <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <Lock className="w-6 h-6 text-primary" />
+                            </div>
+                            <h3 className="text-lg font-semibold">Admin Access Required</h3>
+                            <p className="text-sm text-muted-foreground">Enter password to unlock BYOK settings.</p>
+                        </div>
+                        <form onSubmit={handleUnlockSubmit} className="space-y-4">
+                            <input
+                                type="password"
+                                value={unlockPassword}
+                                onChange={(e) => setUnlockPassword(e.target.value)}
+                                placeholder="Enter password..."
+                                className="w-full px-4 py-2 bg-muted border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                autoFocus
+                            />
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowUnlockModal(false)}
+                                    className="flex-1 px-4 py-2 text-sm font-medium rounded-lg border border-border hover:bg-muted"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90"
+                                >
+                                    Unlock
+                                </button>
+                            </div>
+                        </form>
+                    </motion.div>
+                </div>
+            )}
+        </AnimatePresence>
+    );
 
     const tabs: { id: TabType; label: string; icon: React.ElementType }[] = [
         { id: 'datasource', label: 'Data Source', icon: Database },
@@ -648,7 +740,8 @@ export default function SettingsPage() {
     };
 
     return (
-        <div className="h-full flex flex-col p-6 space-y-6">
+        <div className="h-full flex flex-col p-6 space-y-6 relative">
+            <UnlockModal />
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="space-y-1">
@@ -712,11 +805,18 @@ export default function SettingsPage() {
 
                                         {/* Provider Selection (Dropdown) */}
                                         <div className="space-y-2">
-                                            <label className="text-sm font-medium">Select AI Provider</label>
+                                            <label className="text-sm font-medium flex items-center gap-2">
+                                                Select AI Provider
+                                                {!isAdminUnlocked && <Lock className="w-3 h-3 text-muted-foreground" />}
+                                            </label>
                                             <select
                                                 value={settings.activeAiProvider}
-                                                onChange={(e) => settings.setActiveAiProvider(e.target.value as 'openai' | 'gemini' | 'openrouter')}
-                                                className="w-full max-w-xs px-3 py-2 bg-muted border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                                onChange={(e) => isAdminUnlocked && settings.setActiveAiProvider(e.target.value as 'openai' | 'gemini' | 'openrouter')}
+                                                disabled={!isAdminUnlocked}
+                                                className={cn(
+                                                    "w-full max-w-xs px-3 py-2 bg-muted border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary",
+                                                    !isAdminUnlocked && "opacity-50 cursor-not-allowed"
+                                                )}
                                             >
                                                 <option value="openai">OpenAI</option>
                                                 <option value="gemini">Gemini</option>
@@ -730,6 +830,8 @@ export default function SettingsPage() {
                                             testOpenAIKey={testOpenAIKey}
                                             testGeminiKey={testGeminiKey}
                                             testOpenRouterKey={testOpenRouterKey}
+                                            isUnlocked={isAdminUnlocked}
+                                            onUnlock={() => setShowUnlockModal(true)}
                                         />
 
                                         <div className="pt-4 border-t border-border/50">
@@ -737,37 +839,79 @@ export default function SettingsPage() {
                                             <p className="text-muted-foreground text-sm mb-3">
                                                 Use a specialized service (ZenRows, ScrapingBee) to bypass strong blocks.
                                             </p>
-                                            <ApiKeyInput
-                                                label="Scraping Service Key"
-                                                value={settings.scrapingApiKey}
-                                                onChange={settings.setScrapingApiKey}
-                                                helperText="If provided, we'll try to use this for web scraping."
-                                                placeholder="Enter ZenRows or ScrapingBee key..."
-                                                onTest={testScrapingKey}
-                                            />
+                                            {!isAdminUnlocked ? (
+                                                <div className="p-4 rounded-lg bg-muted/50 border border-border flex items-center justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="p-2 bg-primary/10 rounded-full">
+                                                            <Lock className="w-4 h-4 text-primary" />
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-sm font-medium">Managed Proxy Mode</div>
+                                                            <div className="text-xs text-muted-foreground">Using system-provided proxy keys</div>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => setShowUnlockModal(true)}
+                                                        className="text-xs font-medium text-primary hover:underline"
+                                                    >
+                                                        Unlock
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <ApiKeyInput
+                                                    label="Scraping Service Key"
+                                                    value={settings.scrapingApiKey}
+                                                    onChange={settings.setScrapingApiKey}
+                                                    helperText="If provided, we'll try to use this for web scraping."
+                                                    placeholder="Enter ZenRows or ScrapingBee key..."
+                                                    onTest={testScrapingKey}
+                                                />
+                                            )}
                                         </div>
                                     </div>
                                 )}
                                 {settings.dataSource === 'official-api' && (
                                     <div className="space-y-4 pt-4 border-t border-border animate-in fade-in slide-in-from-top-4">
-                                        <ApiKeyInput
-                                            label="Open States API Key"
-                                            value={settings.openStatesApiKey}
-                                            onChange={settings.setOpenStatesApiKey}
-                                            helperText="Get a free key at openstates.org"
-                                            getKeyUrl="https://openstates.org/accounts/profile/"
-                                            onTest={testOpenStatesKey}
-                                            placeholder="os_..."
-                                        />
-                                        <ApiKeyInput
-                                            label="LegiScan API Key"
-                                            value={settings.legiscanApiKey}
-                                            onChange={settings.setLegiscanApiKey}
-                                            helperText="Get a free key at legiscan.com (30k queries/mo)"
-                                            getKeyUrl="https://legiscan.com/legiscan"
-                                            onTest={testLegiScanKey}
-                                            placeholder="Your 32-character key"
-                                        />
+                                        {!isAdminUnlocked ? (
+                                            <div className="p-4 rounded-lg bg-muted/50 border border-border flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="p-2 bg-primary/10 rounded-full">
+                                                        <Lock className="w-4 h-4 text-primary" />
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-sm font-medium">Managed API Mode</div>
+                                                        <div className="text-xs text-muted-foreground">Using system-provided official data keys</div>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => setShowUnlockModal(true)}
+                                                    className="text-xs font-medium text-primary hover:underline"
+                                                >
+                                                    Unlock
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <ApiKeyInput
+                                                    label="Open States API Key"
+                                                    value={settings.openStatesApiKey}
+                                                    onChange={settings.setOpenStatesApiKey}
+                                                    helperText="Get a free key at openstates.org"
+                                                    getKeyUrl="https://openstates.org/accounts/profile/"
+                                                    onTest={testOpenStatesKey}
+                                                    placeholder="os_..."
+                                                />
+                                                <ApiKeyInput
+                                                    label="LegiScan API Key"
+                                                    value={settings.legiscanApiKey}
+                                                    onChange={settings.setLegiscanApiKey}
+                                                    helperText="Get a free key at legiscan.com (30k queries/mo)"
+                                                    getKeyUrl="https://legiscan.com/legiscan"
+                                                    onTest={testLegiScanKey}
+                                                    placeholder="Your 32-character key"
+                                                />
+                                            </>
+                                        )}
                                         <div className="text-xs text-muted-foreground p-3 bg-muted rounded-lg">
                                             <span className="font-semibold text-foreground">Note:</span> Lawvics will try Open States first if both are provided.
                                         </div>
@@ -778,33 +922,55 @@ export default function SettingsPage() {
                                         <div className="text-sm text-muted-foreground p-3 bg-muted rounded-lg">
                                             <span className="font-semibold text-foreground">How it works:</span> Requests are routed through a proxy (e.g., ZenRows) to bypass anti-bot detection. You also need an LLM key (OpenAI or Gemini) to parse the results.
                                         </div>
-                                        <ApiKeyInput
-                                            label="Scraping Service Key"
-                                            value={settings.scrapingApiKey}
-                                            onChange={settings.setScrapingApiKey}
-                                            helperText="ZenRows, ScrapingBee, or similar"
-                                            placeholder="Enter your proxy API key..."
-                                            getKeyUrl="https://www.zenrows.com/"
-                                            onTest={testScrapingKey}
-                                            required={true}
-                                        />
-                                        <ApiKeyInput
-                                            label="OpenAI API Key (for parsing)"
-                                            value={settings.openaiApiKey}
-                                            onChange={settings.setOpenaiApiKey}
-                                            helperText="Used to extract statute from page content"
-                                            getKeyUrl="https://platform.openai.com/api-keys"
-                                            onTest={testOpenAIKey}
-                                        />
-                                        <ApiKeyInput
-                                            label="Gemini API Key (alternative)"
-                                            value={settings.geminiApiKey}
-                                            onChange={settings.setGeminiApiKey}
-                                            helperText="Use if you prefer Gemini for parsing"
-                                            placeholder="AIzp..."
-                                            getKeyUrl="https://aistudio.google.com/app/apikey"
-                                            onTest={testGeminiKey}
-                                        />
+                                        {!isAdminUnlocked ? (
+                                            <div className="p-4 rounded-lg bg-muted/50 border border-border flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="p-2 bg-primary/10 rounded-full">
+                                                        <Lock className="w-4 h-4 text-primary" />
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-sm font-medium">Managed Proxy Settings</div>
+                                                        <div className="text-xs text-muted-foreground">Using system-provided keys for proxy and parsing</div>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => setShowUnlockModal(true)}
+                                                    className="text-xs font-medium text-primary hover:underline"
+                                                >
+                                                    Unlock
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <ApiKeyInput
+                                                    label="Scraping Service Key"
+                                                    value={settings.scrapingApiKey}
+                                                    onChange={settings.setScrapingApiKey}
+                                                    helperText="ZenRows, ScrapingBee, or similar"
+                                                    placeholder="Enter your proxy API key..."
+                                                    getKeyUrl="https://www.zenrows.com/"
+                                                    onTest={testScrapingKey}
+                                                    required={true}
+                                                />
+                                                <ApiKeyInput
+                                                    label="OpenAI API Key (for parsing)"
+                                                    value={settings.openaiApiKey}
+                                                    onChange={settings.setOpenaiApiKey}
+                                                    helperText="Used to extract statute from page content"
+                                                    getKeyUrl="https://platform.openai.com/api-keys"
+                                                    onTest={testOpenAIKey}
+                                                />
+                                                <ApiKeyInput
+                                                    label="Gemini API Key (alternative)"
+                                                    value={settings.geminiApiKey}
+                                                    onChange={settings.setGeminiApiKey}
+                                                    helperText="Use if you prefer Gemini for parsing"
+                                                    placeholder="AIzp..."
+                                                    getKeyUrl="https://aistudio.google.com/app/apikey"
+                                                    onTest={testGeminiKey}
+                                                />
+                                            </>
+                                        )}
                                     </div>
                                 )}
                             </motion.div>
