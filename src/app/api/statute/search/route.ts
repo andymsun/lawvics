@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getRequestContext } from '@cloudflare/next-on-pages';
 import { StateCode, Statute } from '@/types/statute';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
@@ -484,13 +485,22 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
         }
 
         const dataSource = request.headers.get('x-data-source') || 'system-api';
+
+        // Cloudflare Secrets retrieval
+        let env: Record<string, string> = {};
+        try {
+            env = getRequestContext().env as Record<string, string>;
+        } catch {
+            env = process.env as unknown as Record<string, string>;
+        }
+
         // Read from headers, or fall back to environment variables (for system-api mode)
-        const openaiApiKey = request.headers.get('x-openai-key') || process.env.OPENAI_API_KEY || undefined;
-        const geminiApiKey = request.headers.get('x-gemini-key') || process.env.GOOGLE_GENERATIVE_AI_API_KEY || undefined;
-        const openRouterApiKey = request.headers.get('x-openrouter-key') || process.env.OPENROUTER_API_KEY || undefined;
-        const openStatesApiKey = request.headers.get('x-openstates-key') || process.env.OPENSTATES_API_KEY || undefined;
-        const legiscanApiKey = request.headers.get('x-legiscan-key') || process.env.LEGISCAN_API_KEY || undefined;
-        const scrapingApiKey = request.headers.get('x-scraping-key') || process.env.ZENROWS_API_KEY || process.env.SCRAPINGBEE_API_KEY || undefined;
+        const openaiApiKey = request.headers.get('x-openai-key') || env.OPENAI_API_KEY || process.env.OPENAI_API_KEY || undefined;
+        const geminiApiKey = request.headers.get('x-gemini-key') || env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || undefined;
+        const openRouterApiKey = request.headers.get('x-openrouter-key') || env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY || undefined;
+        const openStatesApiKey = request.headers.get('x-openstates-key') || env.OPENSTATES_API_KEY || process.env.OPENSTATES_API_KEY || undefined;
+        const legiscanApiKey = request.headers.get('x-legiscan-key') || env.LEGISCAN_API_KEY || process.env.LEGISCAN_API_KEY || undefined;
+        const scrapingApiKey = request.headers.get('x-scraping-key') || env.ZENROWS_API_KEY || env.SCRAPINGBEE_API_KEY || process.env.ZENROWS_API_KEY || process.env.SCRAPINGBEE_API_KEY || undefined;
         const activeProvider = request.headers.get('x-active-provider') as AiProvider | null;
         const aiModel = request.headers.get('x-ai-model') || undefined;
 
