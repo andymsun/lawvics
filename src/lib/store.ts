@@ -554,3 +554,111 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         persistSettings(get());
     },
 }));
+
+// ============================================================
+// Saved Statutes Store (useSavedStatuteStore)
+// ============================================================
+
+export interface SavedStatute extends StatuteType {
+    savedAt: number;
+    topic: string;
+}
+
+interface SavedStatuteStoreState {
+    /** Map of citation (unique-ish identifier) to full SavedStatute object */
+    savedStatutes: Record<string, SavedStatute>;
+}
+
+interface SavedStatuteStoreActions {
+    /** Save a statute with a topic */
+    saveStatute: (statute: StatuteType, topic?: string) => void;
+    /** Remove a statute by its citation */
+    removeStatute: (citation: string) => void;
+    /** Check if a statute is saved */
+    isSaved: (citation: string) => boolean;
+    /** Get all saved statutes for a specific state */
+    getStatutesByState: (stateCode: StateCode) => SavedStatute[];
+    /** Get all unique state codes that have saved statutes */
+    getSavedStateCodes: () => StateCode[];
+    /** Get all saved statutes for a specific topic */
+    getStatutesByTopic: (topic: string) => SavedStatute[];
+    /** Get all unique topics */
+    getSavedTopics: () => string[];
+}
+
+export type SavedStatuteStore = SavedStatuteStoreState & SavedStatuteStoreActions;
+
+const SAVED_STATUTES_KEY = 'lawvics-saved-statutes';
+
+function loadSavedStatutes(): Record<string, SavedStatute> {
+    if (typeof window === 'undefined') return {};
+    try {
+        const stored = localStorage.getItem(SAVED_STATUTES_KEY);
+        if (stored) {
+            return JSON.parse(stored);
+        }
+    } catch {
+        // Ignore localStorage errors
+    }
+    return {};
+}
+
+function persistSavedStatutes(statutes: Record<string, SavedStatute>): void {
+    if (typeof window === 'undefined') return;
+    try {
+        localStorage.setItem(SAVED_STATUTES_KEY, JSON.stringify(statutes));
+    } catch {
+        // Ignore localStorage errors
+    }
+}
+
+export const useSavedStatuteStore = create<SavedStatuteStore>((set, get) => ({
+    savedStatutes: loadSavedStatutes(),
+
+    saveStatute: (statute, topic = 'Uncategorized') => {
+        const savedStatute: SavedStatute = {
+            ...statute,
+            savedAt: Date.now(),
+            topic: topic || 'Uncategorized',
+        };
+        const updated = { ...get().savedStatutes, [statute.citation]: savedStatute };
+        set({ savedStatutes: updated });
+        persistSavedStatutes(updated);
+    },
+
+    removeStatute: (citation) => {
+        const { [citation]: _, ...rest } = get().savedStatutes;
+        set({ savedStatutes: rest });
+        persistSavedStatutes(rest);
+    },
+
+    isSaved: (citation) => {
+        return citation in get().savedStatutes;
+    },
+
+    getStatutesByState: (stateCode) => {
+        return Object.values(get().savedStatutes).filter(
+            (s) => s.stateCode === stateCode
+        );
+    },
+
+    getSavedStateCodes: () => {
+        const codes = new Set(
+            Object.values(get().savedStatutes).map((s) => s.stateCode)
+        );
+        return Array.from(codes).sort() as StateCode[];
+    },
+
+    getStatutesByTopic: (topic) => {
+        return Object.values(get().savedStatutes).filter(
+            (s) => s.topic === topic
+        );
+    },
+
+    getSavedTopics: () => {
+        const topics = new Set(
+            Object.values(get().savedStatutes).map((s) => s.topic)
+        );
+        return Array.from(topics).sort();
+    },
+}));

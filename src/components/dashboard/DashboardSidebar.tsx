@@ -11,11 +11,12 @@ import {
     CheckCircle,
     AlertCircle,
     BarChart3,
+    Bookmark,
 } from 'lucide-react';
 import Link from 'next/link';
 
 interface DashboardSidebarProps {
-    activeTab?: 'workspace' | 'history' | 'settings';
+    activeTab?: 'workspace' | 'history' | 'saved' | 'settings';
 }
 
 export function DashboardSidebar({ activeTab = 'workspace' }: DashboardSidebarProps) {
@@ -43,6 +44,7 @@ export function DashboardSidebar({ activeTab = 'workspace' }: DashboardSidebarPr
     const navItems = [
         { id: 'workspace', label: 'Workspace', icon: LayoutDashboard, href: '/dashboard' },
         { id: 'history', label: 'History', icon: History, href: '/dashboard/history' },
+        { id: 'saved', label: 'Saved', icon: Bookmark, href: '/dashboard/saved' },
     ];
 
     return (

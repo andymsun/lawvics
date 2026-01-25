@@ -115,6 +115,13 @@ export const STATE_NAME_TO_CODE: Record<string, StateCode> = {
 };
 
 /**
+ * Normalized (lowercase, trimmed) state name map for robust matching
+ */
+const STATE_NAME_NORMALIZED: Record<string, StateCode> = Object.fromEntries(
+    Object.entries(STATE_NAME_TO_CODE).map(([name, code]) => [name.toLowerCase().trim(), code])
+);
+
+/**
  * Get StateCode from a GeoJSON feature's id or properties
  */
 export function getStateCodeFromGeo(geo: { id?: string; properties?: { name?: string } }): StateCode | null {
@@ -126,13 +133,25 @@ export function getStateCodeFromGeo(geo: { id?: string; properties?: { name?: st
         }
     }
 
-    // Fallback to state name
+    // Fallback to state name (exact match)
     if (geo.properties?.name) {
         const name = geo.properties.name;
         if (name in STATE_NAME_TO_CODE) {
             return STATE_NAME_TO_CODE[name];
         }
+
+        // Fallback to normalized name (lowercase/trimmed)
+        const normalizedName = name.toLowerCase().trim();
+        if (normalizedName in STATE_NAME_NORMALIZED) {
+            return STATE_NAME_NORMALIZED[normalizedName];
+        }
+    }
+
+    // Debug log for unmatched geometries (dev only)
+    if (process.env.NODE_ENV === 'development') {
+        console.warn('[Map Warning] Could not map geo id:', geo.id, 'name:', geo.properties?.name);
     }
 
     return null;
 }
+

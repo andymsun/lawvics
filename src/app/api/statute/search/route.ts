@@ -4,6 +4,8 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { generateObject } from 'ai';
 import { z } from 'zod';
+import * as cheerio from 'cheerio';
+import { PlaywrightCrawler } from 'crawlee';
 // import * as cheerio from 'cheerio'; // Removed for Edge compatibility
 // ...
 // const html = await res.text();
@@ -256,6 +258,27 @@ const ScraperSchema = z.object({
     confidence: z.number().min(0).max(100).describe('Confidence score from 0-100'),
 });
 
+/**
+ * Use Crawlee + Playwright to fetch page content (handles JS rendering)
+ */
+async function fetchPageContent(url: string): Promise<string> {
+    let content = '';
+
+    const crawler = new PlaywrightCrawler({
+        // Headless is default
+        // Use a unique persistence key or in-memory to avoid conflicts
+        requestHandler: async ({ page }) => {
+            // Wait for body to be visible
+            await page.waitForSelector('body');
+            content = await page.content();
+        },
+        maxRequestsPerCrawl: 1,
+    });
+
+    await crawler.run([url]);
+    return content;
+}
+
 async function scrapeStateStatute(
     stateCode: StateCode,
     query: string,
@@ -267,6 +290,29 @@ async function scrapeStateStatute(
     const baseUrl = STATE_LEGISLATURE_URLS[stateCode];
     if (!baseUrl) throw new Error(`No URL for ${stateCode}`);
 
+    try {
+        // 1. Fetch the page content using Crawlee (replaces simple fetch)
+        console.log(`[Crawlee] Visiting ${baseUrl} for ${stateCode}...`);
+        const html = await fetchPageContent(baseUrl);
+
+        const $ = cheerio.load(html);
+
+        // 2. Clean text (remove scripts, styles, etc.)
+        $('script, style, nav, footer, iframe, noscript').remove();
+        const cleanText = $('body').text().replace(/\s+/g, ' ').substring(0, 15000);
+
+        // 3. LLM Extraction
+        const model = getModel(keys, activeProvider, aiModel);
+        const { object } = await generateObject({
+            model,
+            schema: ScraperSchema,
+            prompt: `Extract statute information for the query "${query}" from the following text from ${stateCode}'s legislature website:
+            
+            TEXT:
+            "${cleanText}"
+            
+            If no specific statute is found, return the best match or state "None found" in citation.`,
+        });
     // Proxy Logic (ZenRows / ScrapingBee compatible)
     let targetUrl = baseUrl;
     let headers: Record<string, string> = {
@@ -385,6 +431,7 @@ If you find a specific statute section number and text, extract it. If the page 
 
     throw lastError || new Error(`Failed to scrape ${stateCode} after ${MAX_RETRIES} attempts`);
 }
+
 
 // ============================================================
 // Open States Client
