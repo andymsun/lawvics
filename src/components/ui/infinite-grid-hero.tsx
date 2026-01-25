@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion, useMotionValue, useMotionTemplate, useAnimationFrame } from 'framer-motion';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { Settings2, Sun, Moon } from 'lucide-react';
+import { Sun, Moon } from 'lucide-react';
 import { useTheme } from 'next-themes';
 
 function cn(...inputs: ClassValue[]) {
@@ -51,7 +51,7 @@ interface InfiniteGridHeroProps {
 
 export function InfiniteGridHero({ children, className }: InfiniteGridHeroProps) {
     const [gridSize, setGridSize] = useState(40);
-    const [showSettings, setShowSettings] = useState(false);
+
     const containerRef = useRef<HTMLDivElement>(null);
 
     // Use next-themes for theme management (synced with ThemeProvider)
@@ -77,8 +77,8 @@ export function InfiniteGridHero({ children, className }: InfiniteGridHeroProps)
     };
 
     useAnimationFrame(() => {
-        gridOffsetX.set((gridOffsetX.get() + 2.5) % gridSize);
-        gridOffsetY.set((gridOffsetY.get() + 2.5) % gridSize);
+        gridOffsetX.set((gridOffsetX.get() + 0.625) % gridSize);
+        gridOffsetY.set((gridOffsetY.get() + 0.625) % gridSize);
     });
 
     // Sharper spotlight gradient
@@ -122,48 +122,7 @@ export function InfiniteGridHero({ children, className }: InfiniteGridHeroProps)
                 )} />
             </div>
 
-            {/* Settings Panel (Top Left) */}
-            <div className="absolute top-6 left-6 z-20">
-                <button
-                    onClick={() => setShowSettings(!showSettings)}
-                    className={cn(
-                        'p-2 rounded-lg transition-colors',
-                        isDark
-                            ? 'bg-slate-800 text-slate-400 hover:text-white'
-                            : 'bg-white/80 text-slate-500 hover:text-slate-700 shadow-sm'
-                    )}
-                >
-                    <Settings2 className="w-5 h-5" />
-                </button>
 
-                {showSettings && (
-                    <div className={cn(
-                        'absolute top-12 left-0 p-4 rounded-xl shadow-lg w-48',
-                        isDark ? 'bg-slate-800' : 'bg-white'
-                    )}>
-                        <label className={cn(
-                            'text-xs font-medium uppercase tracking-wider mb-2 block',
-                            isDark ? 'text-slate-400' : 'text-slate-500'
-                        )}>
-                            Grid Density
-                        </label>
-                        <input
-                            type="range"
-                            min="20"
-                            max="80"
-                            value={gridSize}
-                            onChange={(e) => setGridSize(Number(e.target.value))}
-                            className="w-full accent-slate-500"
-                        />
-                        <div className={cn(
-                            'text-xs text-center mt-1',
-                            isDark ? 'text-slate-500' : 'text-slate-400'
-                        )}>
-                            {gridSize}px
-                        </div>
-                    </div>
-                )}
-            </div>
 
             {/* Theme Toggle (Top Right) */}
             <button
