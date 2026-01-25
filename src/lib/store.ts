@@ -470,7 +470,7 @@ const DEFAULT_SETTINGS: SettingsState = {
     showConfidence: true,
     cacheResults: false,
     themeColor: 'blue',
-    activeAiProvider: 'openai',
+    activeAiProvider: 'openrouter',
     openaiModel: 'gpt-4o-mini',
     geminiModel: 'gemini-1.5-flash',
     openRouterModel: 'openai/gpt-4o-mini',
