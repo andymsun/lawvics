@@ -338,7 +338,7 @@ export default function BriefView() {
 
             // Metrics Box
             doc.setDrawColor(220);
-            doc.setFillColor(250);
+            doc.setFillColor(250, 250, 250);
             doc.rect(margin, 45, pageWidth - (margin * 2), 25, 'FD');
 
             doc.setFontSize(10);
@@ -424,7 +424,7 @@ export default function BriefView() {
             doc.save(`${filename}.pdf`);
         }
         else if (format === 'docx') {
-            const children = [
+            const children: (Paragraph | Table)[] = [
                 new Paragraph({
                     text: "50-State Survey Brief",
                     heading: HeadingLevel.TITLE,
