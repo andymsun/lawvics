@@ -4,7 +4,6 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { generateObject } from 'ai';
 import { z } from 'zod';
-import { getRequestContext } from '@cloudflare/next-on-pages';
 
 // Force edge runtime for Cloudflare Pages
 export const runtime = 'edge';
@@ -218,19 +217,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<AllStates
         const activeProvider = request.headers.get('x-active-provider') as AiProvider | null;
         const aiModel = request.headers.get('x-ai-model') || undefined;
 
-        // Cloudflare Secrets retrieval
-        let env: Record<string, string> = {};
-        try {
-            env = getRequestContext().env as Record<string, string>;
-        } catch {
-            // Fallback if not running in CF Pages or getRequestContext fails
-            env = process.env as unknown as Record<string, string>;
-        }
-
         // Read from headers, or fall back to environment variables (for system-api mode)
-        const openaiApiKey = request.headers.get('x-openai-key') || env.OPENAI_API_KEY || process.env.OPENAI_API_KEY || undefined;
-        const geminiApiKey = request.headers.get('x-gemini-key') || env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || undefined;
-        const openRouterApiKey = request.headers.get('x-openrouter-key') || env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY || undefined;
+        const openaiApiKey = request.headers.get('x-openai-key') || process.env.OPENAI_API_KEY || undefined;
+        const geminiApiKey = request.headers.get('x-gemini-key') || process.env.GOOGLE_GENERATIVE_AI_API_KEY || undefined;
+        const openRouterApiKey = request.headers.get('x-openrouter-key') || process.env.OPENROUTER_API_KEY || undefined;
 
         debug.log('API Keys:', {
             hasOpenAI: !!openaiApiKey,
