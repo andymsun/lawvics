@@ -157,6 +157,11 @@ async function fetchStatuteFromApi(
     } else if (dataSource === 'official-api') {
         if (openStatesApiKey) headers['x-openstates-key'] = openStatesApiKey;
         if (legiscanApiKey) headers['x-legiscan-key'] = legiscanApiKey;
+    } else if (dataSource === 'system-api') {
+        // System API Mode: Force OpenRouter and inherit env vars from server
+        // We don't need to send keys from client since they are on server
+        headers['x-active-provider'] = 'openrouter';
+        // Optional: Hint to use OPENROUTER_API_KEY on server if needed
     }
 
     debug.log(`[${stateCode}] Fetching with headers:`, {
@@ -233,7 +238,13 @@ async function fetchBatchStatutes(
 
     // Determine which model to use based on provider
     let aiModel: string;
-    if (activeAiProvider === 'openrouter') {
+    let effectiveProvider = activeAiProvider;
+
+    if (settings.dataSource === 'system-api') {
+        // FORCE OpenRouter for System API
+        effectiveProvider = 'openrouter';
+        aiModel = 'openai/gpt-4o-mini';
+    } else if (activeAiProvider === 'openrouter') {
         aiModel = openRouterModel;
     } else if (activeAiProvider === 'gemini') {
         aiModel = geminiModel;
@@ -243,7 +254,7 @@ async function fetchBatchStatutes(
 
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'x-active-provider': activeAiProvider,
+        'x-active-provider': effectiveProvider,
         'x-ai-model': aiModel
     };
 
@@ -395,7 +406,10 @@ async function processChunk(
     // For LLM-based modes:
     // If chunk has only 1 state, use individual fetch (enables scraping/proxy).
     // If chunk has >1 state, use batch API (pure LLM generation, no scraping).
-    if (dataSource === 'llm-scraper' || dataSource === 'scraping-proxy') {
+    // For LLM-based modes:
+    // If chunk has only 1 state, use individual fetch (enables scraping/proxy).
+    // If chunk has >1 state, use batch API (pure LLM generation, no scraping).
+    if (dataSource === 'llm-scraper' || dataSource === 'scraping-proxy' || dataSource === 'system-api') {
         if (stateCodes.length === 1) {
             // Single state -> Use scraping logic
             const stateCode = stateCodes[0];
@@ -524,7 +538,13 @@ async function fetchAllStatesAtOnce(query: string): Promise<Record<string, Statu
 
     // Determine which model to use based on provider
     let aiModel: string;
-    if (activeAiProvider === 'openrouter') {
+    let effectiveProvider = activeAiProvider;
+
+    if (settings.dataSource === 'system-api') {
+        // FORCE OpenRouter for System API
+        effectiveProvider = 'openrouter';
+        aiModel = 'openai/gpt-4o-mini';
+    } else if (activeAiProvider === 'openrouter') {
         aiModel = openRouterModel;
     } else if (activeAiProvider === 'gemini') {
         aiModel = geminiModel;
@@ -534,7 +554,7 @@ async function fetchAllStatesAtOnce(query: string): Promise<Record<string, Statu
 
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'x-active-provider': activeAiProvider,
+        'x-active-provider': effectiveProvider,
         'x-ai-model': aiModel
     };
 
