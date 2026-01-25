@@ -23,9 +23,12 @@ export default function Home() {
 
         {/* Subtitle */}
         <p className="text-xl md:text-2xl text-[#0f172a]/80 dark:text-slate-300 max-w-2xl mx-auto leading-relaxed">
-          The 50-State Survey.{' '}
+          500,000 Statutes.{' '}
+          <span className="font-semibold text-[#0f172a] dark:text-slate-200">
+            50 States.
+          </span>{' '}
           <span className="font-bold text-[#0f172a] dark:text-white underline decoration-[#0f172a]/20 dark:decoration-white/20 underline-offset-8">
-            Done in 50 Seconds.
+            Under 5 Minutes.
           </span>
         </p>
 
