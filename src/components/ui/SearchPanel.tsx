@@ -25,8 +25,8 @@ export default function SearchPanel() {
             return;
         }
 
-        // Pre-flight quota check for non-mock modes
-        if (settings.dataSource !== 'mock') {
+        // Pre-flight quota check for non-mock and non-system modes
+        if (settings.dataSource !== 'mock' && settings.dataSource !== 'system-api') {
             setIsChecking(true);
             try {
                 const quotaResult = await runQuotaCheck(
