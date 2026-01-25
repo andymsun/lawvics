@@ -129,4 +129,4 @@ src/
 
 ---
 
-Built with ❤️ by the Lawvics Team. We got this!
+Built with ❤️ by the Lawvics/JurisInsight Team. We got this!
