@@ -12,9 +12,12 @@ LexState is a high-performance 50-state survey engine designed for legal profess
 
 ## Current Status
 *   **Phase**: Maintenance
-*   **Active Task**: Completed Batch Settings Feature. Moving to Changelog.
+Functional Purity: UI components should be pure functions of their props. Side effects (data fetching) belong in hooks/services, not UI components.
 
-## Architecture Rules
-1.  **Accuracy > Speed**: Any result that fails specific verification (source URL check, date check) MUST be flagged or discarded. Never guess a statute text.
-2.  **Strict Typing**: All data flowing between agents (Translator -> Swarm -> Auditor) must adhere to the shared JSON Schema. No `any`.
-3.  **Functional Purity**: UI components should be pure functions of their props. Side effects (data fetching) belong in hooks/services, not UI components.
+## Changelog
+*   **Feature**: Batch Settings (Completed)
+*   **Feature**: Landing Page Chat Box (Completed) -- Replaced launch button with search input that auto-starts survey on dashboard.
+*   **Feature**: Rotating Search Placeholders (Completed) -- Landing page search input rotates generically through prompts (6s interval, 0.3s fade) with smooth fading animation. Fixed visibility issue by adjusting DOM order.
+
+## Current Task: None
+*   **Goal**: Awaiting next instruction.

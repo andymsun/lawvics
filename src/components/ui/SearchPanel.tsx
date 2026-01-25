@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { searchAllStates, MaxConcurrentSurveysError } from "@/lib/agents/orchestrator";
 import { runQuotaCheck } from "@/lib/agents/quota-guard";
 import { useSurveyHistoryStore, useSettingsStore, getRunningCount, MAX_CONCURRENT_SURVEYS } from "@/lib/store";
@@ -13,10 +14,12 @@ export default function SearchPanel() {
     const runningCount = useSurveyHistoryStore(getRunningCount);
     const startSurvey = useSurveyHistoryStore((state) => state.startSurvey);
     const settings = useSettingsStore();
+    const searchParams = useSearchParams();
+    const router = useRouter();
+    const autoQuery = searchParams.get("q");
 
-    const handleSearch = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!query.trim()) return;
+    const executeSearch = async (searchQuery: string) => {
+        if (!searchQuery.trim()) return;
         setError(null);
 
         // Check concurrency limit
@@ -49,11 +52,11 @@ export default function SearchPanel() {
         }
 
         // Create the session first (returns ID)
-        const surveyId = startSurvey(query);
+        const surveyId = startSurvey(searchQuery);
 
         // Fire and forget - results stream into the session
         // Pass derived mock mode boolean
-        searchAllStates(query, surveyId, settings.dataSource === 'mock').catch((err) => {
+        searchAllStates(searchQuery, surveyId, settings.dataSource === 'mock').catch((err) => {
             if (err instanceof MaxConcurrentSurveysError) {
                 setError(err.message);
             } else {
@@ -64,6 +67,22 @@ export default function SearchPanel() {
         // Clear query for next search
         setQuery("");
     };
+
+    const handleSearch = (e: React.FormEvent) => {
+        e.preventDefault();
+        executeSearch(query);
+    };
+
+    // Auto-search effect
+    useEffect(() => {
+        if (autoQuery) {
+            const decodedQuery = decodeURIComponent(autoQuery);
+            setQuery(decodedQuery);
+            executeSearch(decodedQuery);
+            router.replace('/dashboard');
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [autoQuery, router]);
 
     return (
         <div className="flex flex-col items-center justify-center p-6 w-full max-w-2xl mx-auto">
