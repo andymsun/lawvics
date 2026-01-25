@@ -560,19 +560,24 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
                 debug.error('No API keys provided for official-api mode');
                 throw new Error('Official API mode requires Open States OR LegiScan API Key');
             }
-        } else if (dataSource === 'llm-scraper') {
-            debug.log('Using LLM-SCRAPER mode');
+        } else if (dataSource === 'llm-scraper' || dataSource === 'system-api') {
+            debug.log(`Using ${dataSource.toUpperCase()} mode`);
             debug.time('llm-scrape');
             // Determine which provider to use based on available keys
             const detectedProvider: AiProvider = activeProvider ||
                 (openRouterApiKey ? 'openrouter' : openaiApiKey ? 'openai' : 'gemini');
+
+            if (!openaiApiKey && !geminiApiKey && !openRouterApiKey) {
+                throw new Error(`No API key provided for ${dataSource}. Please check your environment variables or Settings.`);
+            }
+
             statute = await scrapeStateStatute(
                 stateCode,
                 query,
                 { openai: openaiApiKey, gemini: geminiApiKey, openrouter: openRouterApiKey },
                 detectedProvider,
                 aiModel,
-                undefined // No proxy for llm-scraper
+                undefined // No proxy for these modes
             );
             debug.timeEnd('llm-scrape');
         } else if (dataSource === 'scraping-proxy') {
