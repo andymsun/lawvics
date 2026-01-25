@@ -177,9 +177,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<BatchSear
             return NextResponse.json({ success: false, error: 'Missing stateCodes array or query' }, { status: 400 });
         }
 
-        const openaiApiKey = request.headers.get('x-openai-key') || undefined;
-        const geminiApiKey = request.headers.get('x-gemini-key') || undefined;
-        const openRouterApiKey = request.headers.get('x-openrouter-key') || undefined;
+        // Read from headers, or fall back to environment variables (for system-api mode)
+        const openaiApiKey = request.headers.get('x-openai-key') || process.env.OPENAI_API_KEY || undefined;
+        const geminiApiKey = request.headers.get('x-gemini-key') || process.env.GOOGLE_GENERATIVE_AI_API_KEY || undefined;
+        const openRouterApiKey = request.headers.get('x-openrouter-key') || process.env.OPENROUTER_API_KEY || undefined;
         const activeProvider = request.headers.get('x-active-provider') as AiProvider | null;
         const aiModel = request.headers.get('x-ai-model') || undefined;
 
