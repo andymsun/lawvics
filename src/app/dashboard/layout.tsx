@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSurveyHistoryStore, useShallow, StatuteEntry } from '@/lib/store';
@@ -20,13 +20,6 @@ export default function DashboardLayout({
 }) {
     const pathname = usePathname();
     const [isReportOpen, setIsReportOpen] = useState(false);
-    const [mounted, setMounted] = useState(false);
-
-    // Prevent hydration mismatch
-    useEffect(() => {
-        setMounted(true);
-    }, []);
-
     // Get statutes from the ACTIVE SESSION for progress bar
     const activeSession = useSurveyHistoryStore(
         useShallow((state) => state.surveys.find((s) => s.id === state.activeSurveyId))
@@ -42,9 +35,6 @@ export default function DashboardLayout({
         [statutes]
     );
 
-    const toggleTheme = () => {
-        // Theme toggling logic if needed, or use next-themes directly
-    };
 
     const tabs = [
         { id: 'geospatial', label: 'Geospatial', icon: Map, href: '/dashboard' },
@@ -130,9 +120,10 @@ export default function DashboardLayout({
             <div className="flex-1 flex overflow-hidden">
                 <DashboardSidebar
                     activeTab={
-                        pathname === '/dashboard/history' ? 'history' :
-                            pathname === '/dashboard/settings' ? 'settings' :
-                                'workspace'
+                        pathname?.startsWith('/dashboard/history') ? 'history' :
+                            pathname?.startsWith('/dashboard/settings') ? 'settings' :
+                                pathname?.startsWith('/dashboard/saved') ? 'saved' :
+                                    'workspace'
                     }
                 />
 

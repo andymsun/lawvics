@@ -44,14 +44,17 @@ function getStateStatus(entry: StatuteEntry | undefined): StateStatus {
 // Memoized State Path Component
 // ============================================================
 
-interface StatePathProps {
-    geo: any;
-    stateCode: StateCode | null;
-    status: StateStatus;
-    onClick: (stateCode: StateCode) => void;
+interface GeoObject {
+    rsmKey: string;
+    id?: string;
+    properties?: {
+        name?: string;
+        [key: string]: unknown;
+    };
+    [key: string]: unknown;
 }
 
-const StatePath = memo(function StatePath({ geo, stateCode, status, onClick }: StatePathProps) {
+const StatePath = memo(function StatePath({ geo, stateCode, status, onClick }: { geo: GeoObject; stateCode: StateCode | null; status: StateStatus; onClick: (stateCode: StateCode) => void }) {
     const fill = STATUS_COLORS[status];
     const isLoading = status === 'loading';
 
@@ -125,29 +128,27 @@ function DetailsPanel({ statute, onClose }: DetailsPanelProps) {
 
 function MapLegend() {
     return (
-        <div className="absolute top-4 right-4 bg-card/95 backdrop-blur-sm p-4 rounded-xl shadow-lg border border-border text-xs">
-            <h3 className="font-bold mb-3 text-foreground">Status Legend</h3>
-            <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded" style={{ backgroundColor: STATUS_COLORS.idle }} />
-                    <span className="text-muted-foreground">No Data</span>
-                </div>
-                <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded animate-pulse" style={{ backgroundColor: STATUS_COLORS.loading }} />
-                    <span className="text-muted-foreground">Loading</span>
-                </div>
-                <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded" style={{ backgroundColor: STATUS_COLORS.success }} />
-                    <span className="text-muted-foreground">Verified</span>
-                </div>
-                <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded" style={{ backgroundColor: STATUS_COLORS.suspicious }} />
-                    <span className="text-muted-foreground">Suspicious</span>
-                </div>
-                <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded" style={{ backgroundColor: STATUS_COLORS.error }} />
-                    <span className="text-muted-foreground">Error</span>
-                </div>
+        <div className="absolute bottom-6 right-6 flex flex-col items-start gap-3 px-4 py-4 rounded-xl bg-background/20 backdrop-blur-md border border-white/10 shadow-2xl z-30">
+            <h3 className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-1 select-none">Status</h3>
+            <div className="flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-[#D6D6DA]" />
+                <span className="text-[11px] font-medium text-white/80">Pending</span>
+            </div>
+            <div className="flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-[#3B82F6] animate-pulse" />
+                <span className="text-[11px] font-medium text-white/80">Loading</span>
+            </div>
+            <div className="flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-[#22C55E]" />
+                <span className="text-[11px] font-medium text-white/80">Verified</span>
+            </div>
+            <div className="flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-[#EAB308]" />
+                <span className="text-[11px] font-medium text-white/80">Risk</span>
+            </div>
+            <div className="flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-[#EF4444]" />
+                <span className="text-[11px] font-medium text-white/80">Error</span>
             </div>
         </div>
     );
@@ -162,7 +163,6 @@ const InteractiveMap = () => {
 
     // Use useShallow to prevent re-renders when unrelated store state changes
     const activeStatutes = useSurveyHistoryStore(useShallow(getActiveSessionStatutes));
-    const activeSurveyId = useSurveyHistoryStore((state) => state.activeSurveyId);
     const activeSurvey = useSurveyHistoryStore((state) =>
         state.surveys.find(s => s.id === state.activeSurveyId)
     );
@@ -189,8 +189,8 @@ const InteractiveMap = () => {
                 className="w-full h-full"
             >
                 <Geographies geography={geoUrl}>
-                    {({ geographies }: { geographies: any[] }) =>
-                        geographies.map((geo: any) => {
+                    {({ geographies }: { geographies: GeoObject[] }) =>
+                        geographies.map((geo: GeoObject) => {
                             const stateCode = getStateCodeFromGeo(geo);
 
                             // Determine status for this state

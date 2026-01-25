@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSurveyHistoryStore, SurveyRecord } from '@/lib/store';
 import { FileText, Clock, CheckCircle, XCircle, Eye } from 'lucide-react';
+import { DoubleConfirmDelete } from '@/components/ui/DoubleConfirmDelete';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -114,8 +115,15 @@ export default function HistoryPage() {
 function SurveyRow({ survey }: { survey: SurveyRecord }) {
     const router = useRouter();
     const setActiveSurvey = useSurveyHistoryStore((state) => state.setActiveSurvey);
-    const statesAnalyzed = survey.successCount + survey.errorCount;
-    const hasRisk = survey.errorCount > 0;
+
+    // Derived state for live updates
+    const statutes = survey.statutes || {};
+    const statesAnalyzed = Object.keys(statutes).length;
+
+    // Check for risk/errors in real-time
+    const hasRisk = Object.values(statutes).some(s =>
+        s instanceof Error || (s.trustLevel === 'suspicious' || s.trustLevel === 'unverified')
+    );
     const statusColor = {
         running: 'text-yellow-500',
         completed: 'text-green-500',
@@ -184,13 +192,19 @@ function SurveyRow({ survey }: { survey: SurveyRecord }) {
 
             {/* Action */}
             <td className="px-4 py-4 text-right">
-                <button
-                    onClick={handleViewResults}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
-                >
-                    <Eye className="w-3.5 h-3.5" />
-                    View Results
-                </button>
+                <div className="flex items-center justify-end gap-2">
+                    <button
+                        onClick={handleViewResults}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
+                    >
+                        <Eye className="w-3.5 h-3.5" />
+                        View Results
+                    </button>
+                    <DoubleConfirmDelete
+                        onConfirm={() => useSurveyHistoryStore.getState().deleteSurvey(survey.id)}
+                        className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                    />
+                </div>
             </td>
         </tr>
     );

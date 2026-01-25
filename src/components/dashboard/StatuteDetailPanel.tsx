@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Globe, Bot, Zap, ExternalLink, Code2, Bookmark, BookmarkCheck, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { useSurveyHistoryStore, useSettingsStore, useShallow, getActiveSessionStatutes, useSavedStatuteStore } from '@/lib/store';
-import { StateCode } from '@/types/statute';
+import { StateCode, Statute } from '@/types/statute';
+import { StatuteErrorWithSuggestions } from '@/lib/agents/suggester';
 import StatuteCard from '@/components/ui/StatuteCard';
 
 /**
@@ -52,17 +53,10 @@ export default function StatuteDetailPanel() {
     const settings = useSettingsStore();
     const saveStatute = useSavedStatuteStore((state) => state.saveStatute);
     const removeStatute = useSavedStatuteStore((state) => state.removeStatute);
-    const isSaved = useSavedStatuteStore((state) => state.isSaved);
+    const savedStatutes = useSavedStatuteStore((state) => state.savedStatutes);
 
     // Local state for sliding window
     const [isCollapsed, setIsCollapsed] = useState(false);
-
-    // Reset collapsed state when switching states
-    useEffect(() => {
-        if (activeStateCode) {
-            setIsCollapsed(false);
-        }
-    }, [activeStateCode]);
 
     // Get active session data
     const activeSurveyId = useSurveyHistoryStore((state) => state.activeSurveyId);
@@ -110,6 +104,7 @@ export default function StatuteDetailPanel() {
                 <>
                     {/* Floating Panel (Non-intrusive) */}
                     <motion.div
+                        key={activeStateCode}
                         initial={{ x: '100%', opacity: 0 }}
                         animate={{
                             x: isCollapsed ? 'calc(100% - 0px)' : 0,
@@ -148,16 +143,16 @@ export default function StatuteDetailPanel() {
                                     {statute && (
                                         <button
                                             onClick={() => {
-                                                if (isSaved(statute.citation)) {
+                                                if (!!savedStatutes[statute.citation]) {
                                                     removeStatute(statute.citation);
                                                 } else {
                                                     saveStatute(statute, activeSurvey?.query);
                                                 }
                                             }}
                                             className="p-2 rounded-lg hover:bg-muted transition-colors"
-                                            title={isSaved(statute.citation) ? 'Remove from saved' : 'Save statute'}
+                                            title={!!savedStatutes[statute.citation] ? 'Remove from saved' : 'Save statute'}
                                         >
-                                            {isSaved(statute.citation) ? (
+                                            {!!savedStatutes[statute.citation] ? (
                                                 <BookmarkCheck className="w-5 h-5 text-primary" />
                                             ) : (
                                                 <Bookmark className="w-5 h-5 text-muted-foreground" />
@@ -181,13 +176,13 @@ export default function StatuteDetailPanel() {
                                         <p className="text-sm">{(selectedStatuteEntry as Error).message}</p>
 
                                         {/* Suggestions Section */}
-                                        {(selectedStatuteEntry as any).suggestions && (selectedStatuteEntry as any).suggestions.length > 0 && (
+                                        {selectedStatuteEntry instanceof StatuteErrorWithSuggestions && selectedStatuteEntry.suggestions && selectedStatuteEntry.suggestions.length > 0 && (
                                             <div className="mt-4 pt-4 border-t border-slate-500/20">
                                                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                                                     Did you mean?
                                                 </p>
                                                 <div className="space-y-2">
-                                                    {((selectedStatuteEntry as any).suggestions as string[]).map((suggestion, idx) => (
+                                                    {(selectedStatuteEntry.suggestions).map((suggestion, idx) => (
                                                         <RetryButton
                                                             key={idx}
                                                             suggestion={suggestion}
@@ -242,11 +237,11 @@ export default function StatuteDetailPanel() {
                                                     !(entry instanceof Error) // Exclude errors
                                                 )
                                                 .map(([code, entry]) => {
-                                                    const s = entry as import('@/types/statute').Statute;
+                                                    const s = entry as Statute;
                                                     return (
                                                         <button
                                                             key={code}
-                                                            onClick={() => setActiveState(code as any)}
+                                                            onClick={() => setActiveState(code as StateCode)}
                                                             className="w-full text-left p-3 rounded-lg border border-border bg-card/50 hover:bg-muted/80 transition-all group"
                                                         >
                                                             <div className="flex items-center justify-between mb-1">

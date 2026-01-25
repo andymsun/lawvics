@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 import { LegalStore, StateResult, Statute } from '@/types/legal';
 import { StateCode, Statute as StatuteType } from '@/types/statute';
@@ -149,108 +150,160 @@ interface SurveyHistoryActions {
     /** Set an error for a specific session */
     setSessionError: (surveyId: number, stateCode: StateCode, error: Error) => void;
     /** Cancel a running survey */
+    /** Cancel a running survey */
     cancelSurvey: (id: number) => void;
+    /** Delete a survey from history */
+    deleteSurvey: (id: number) => void;
 }
 
 export type SurveyHistoryStore = SurveyHistoryState & SurveyHistoryActions;
 
 let surveyId = 100; // Start from 100 for "Survey #101" etc.
 
-export const useSurveyHistoryStore = create<SurveyHistoryStore>((set, get) => ({
-    surveys: [],
-    activeSurveyId: null,
-    activeStateCode: null,
+export const useSurveyHistoryStore = create<SurveyHistoryStore>()(
+    persist(
+        (set, get) => ({
+            surveys: [],
+            activeSurveyId: null,
+            activeStateCode: null,
 
-    startSurvey: (query) => {
-        const id = ++surveyId;
-        const survey: SurveyRecord = {
-            id,
-            query,
-            startedAt: Date.now(),
-            successCount: 0,
-            errorCount: 0,
-            status: 'running',
-            statutes: {}, // Initialize empty statutes map
-        };
-        set((state) => ({
-            surveys: [survey, ...state.surveys].slice(0, 50), // Keep max 50
-            activeSurveyId: id,
-        }));
-        return id;
-    },
+            startSurvey: (query) => {
+                const id = ++surveyId;
+                const survey: SurveyRecord = {
+                    id,
+                    query,
+                    startedAt: Date.now(),
+                    successCount: 0,
+                    errorCount: 0,
+                    status: 'running',
+                    statutes: {}, // Initialize empty statutes map
+                };
+                set((state) => ({
+                    surveys: [survey, ...state.surveys].slice(0, 50), // Keep max 50
+                    activeSurveyId: id,
+                }));
+                return id;
+            },
 
-    updateSurvey: (id, update) =>
-        set((state) => ({
-            surveys: state.surveys.map((s) =>
-                s.id === id ? { ...s, ...update } : s
-            ),
-        })),
+            updateSurvey: (id, update) =>
+                set((state) => ({
+                    surveys: state.surveys.map((s) =>
+                        s.id === id ? { ...s, ...update } : s
+                    ),
+                })),
 
-    completeSurvey: (id, successCount, errorCount) => {
-        set((state) => ({
-            surveys: state.surveys.map((s) =>
-                s.id === id
-                    ? {
-                        ...s,
-                        completedAt: Date.now(),
-                        successCount,
-                        errorCount,
-                        status: errorCount > successCount ? 'failed' : 'completed',
-                    }
-                    : s
-            ),
-        }));
+            completeSurvey: (id, successCount, errorCount) => {
+                set((state) => ({
+                    surveys: state.surveys.map((s) =>
+                        s.id === id
+                            ? {
+                                ...s,
+                                completedAt: Date.now(),
+                                successCount,
+                                errorCount,
+                                status: errorCount > successCount ? 'failed' : 'completed',
+                            }
+                            : s
+                    ),
+                }));
 
-        // Add notification
-        const survey = get().surveys.find((s) => s.id === id);
-        if (survey) {
-            useNotificationStore.getState().addNotification({
-                icon: errorCount > successCount ? 'error' : 'success',
-                title: `Survey #${id} Completed`,
-                description: `${successCount} states verified, ${errorCount} errors`,
-                time: 'Just now',
-            });
+                // Add notification
+                const survey = get().surveys.find((s) => s.id === id);
+                if (survey) {
+                    useNotificationStore.getState().addNotification({
+                        icon: errorCount > successCount ? 'error' : 'success',
+                        title: `Survey #${id} Completed`,
+                        description: `${successCount} states verified, ${errorCount} errors`,
+                        time: 'Just now',
+                    });
+                }
+            },
+
+            setActiveSurvey: (id) => set({ activeSurveyId: id }),
+
+            setSessionStatute: (surveyId, stateCode, data) =>
+                set((state) => ({
+                    surveys: state.surveys.map((s) =>
+                        s.id === surveyId
+                            ? { ...s, statutes: { ...s.statutes, [stateCode]: data } }
+                            : s
+                    ),
+                })),
+
+            setSessionError: (surveyId, stateCode, error) =>
+                set((state) => ({
+                    surveys: state.surveys.map((s) =>
+                        s.id === surveyId
+                            ? { ...s, statutes: { ...s.statutes, [stateCode]: error } }
+                            : s
+                    ),
+                })),
+
+            cancelSurvey: (id) => {
+                set((state) => ({
+                    surveys: state.surveys.map((s) =>
+                        s.id === id ? { ...s, status: 'cancelled', completedAt: Date.now() } : s
+                    ),
+                }));
+
+                useNotificationStore.getState().addNotification({
+                    icon: 'info',
+                    title: `Survey #${id} Cancelled`,
+                    description: `The 50-state survey was stopped by the user.`,
+                    time: 'Just now',
+                });
+            },
+
+            deleteSurvey: (id) => {
+                set((state) => ({
+                    surveys: state.surveys.filter((s) => s.id !== id),
+                    activeSurveyId: state.activeSurveyId === id ? null : state.activeSurveyId,
+                }));
+            },
+
+            // UI Actions
+            setActiveState: (code) => set({ activeStateCode: code }),
+        }),
+        {
+            name: 'lawvics-survey-history',
+            storage: createJSONStorage(() => localStorage),
+            partialize: (state) => ({
+                surveys: state.surveys.map(survey => ({
+                    ...survey,
+                    // Convert Error objects to serializable format
+                    statutes: Object.fromEntries(
+                        Object.entries(survey.statutes).map(([key, value]) => [
+                            key,
+                            value instanceof Error
+                                ? { __isError: true, message: value.message }
+                                : value
+                        ])
+                    )
+                })),
+            }),
+            onRehydrateStorage: () => (state) => {
+                if (state?.surveys) {
+                    // Restore Error objects and update surveyId counter
+                    const maxId = Math.max(100, ...state.surveys.map(s => s.id));
+                    surveyId = maxId;
+
+                    // Rehydrate Error objects
+                    state.surveys = state.surveys.map(survey => ({
+                        ...survey,
+                        statutes: Object.fromEntries(
+                            Object.entries(survey.statutes).map(([key, value]) => [
+                                key,
+                                (value as { __isError?: boolean; message?: string })?.__isError
+                                    ? new Error((value as { message: string }).message)
+                                    : value
+                            ])
+                        )
+                    }));
+                }
+            },
         }
-    },
-
-    setActiveSurvey: (id) => set({ activeSurveyId: id }),
-
-    setSessionStatute: (surveyId, stateCode, data) =>
-        set((state) => ({
-            surveys: state.surveys.map((s) =>
-                s.id === surveyId
-                    ? { ...s, statutes: { ...s.statutes, [stateCode]: data } }
-                    : s
-            ),
-        })),
-
-    setSessionError: (surveyId, stateCode, error) =>
-        set((state) => ({
-            surveys: state.surveys.map((s) =>
-                s.id === surveyId
-                    ? { ...s, statutes: { ...s.statutes, [stateCode]: error } }
-                    : s
-            ),
-        })),
-
-    cancelSurvey: (id) => {
-        set((state) => ({
-            surveys: state.surveys.map((s) =>
-                s.id === id ? { ...s, status: 'cancelled', completedAt: Date.now() } : s
-            ),
-        }));
-
-        useNotificationStore.getState().addNotification({
-            icon: 'info',
-            title: `Survey #${id} Cancelled`,
-            description: `The 50-state survey was stopped by the user.`,
-            time: 'Just now',
-        });
-    },
-
-    // UI Actions
-    setActiveState: (code) => set({ activeStateCode: code }),
-}));
+    )
+);
 
 /** Selector: Count of currently running surveys */
 export const getRunningCount = (state: SurveyHistoryStore): number =>

@@ -5,13 +5,22 @@ import { ArrowUpFromLine } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ExportModal } from './ExportModal';
 
-interface ExportButtonProps {
-    data: any[];
-    type: 'history' | 'saved';
-    variant?: 'default' | 'ghost'; // For different contexts if needed
+export interface ExportItem {
+    id?: string | number;
+    citation?: string;
+    query?: string;
+    statute_text?: string;
+    textSnippet?: string;
+    // For SurveyRecord - nested statutes
+    statutes?: Record<string, { textSnippet?: string; citation?: string } | Error>;
 }
 
-export function ExportButton({ data, type, variant = 'default' }: ExportButtonProps) {
+interface ExportButtonProps {
+    data: ExportItem[];
+    type: 'history' | 'saved';
+}
+
+export function ExportButton({ data, type }: ExportButtonProps) {
     const [isModalOpen, setIsModalOpen] = React.useState(false);
 
     return (
