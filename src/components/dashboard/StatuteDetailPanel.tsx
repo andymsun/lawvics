@@ -12,14 +12,15 @@ import StatuteCard from '@/components/ui/StatuteCard';
  * RetryButton component for "Did you mean?" suggestions
  * Handles loading state and proper async fetch
  */
-function RetryButton({ suggestion, stateCode, surveyId }: { suggestion: string; stateCode: StateCode; surveyId: number }) {
+function RetryButton({ suggestion, stateCode, surveyId, isRetry = false, label }: { suggestion: string; stateCode: StateCode; surveyId: number, isRetry?: boolean, label?: string }) {
     const [isLoading, setIsLoading] = useState(false);
 
     const handleRetry = async () => {
         setIsLoading(true);
         try {
             const { fetchStateStatute } = await import('@/lib/agents/orchestrator');
-            await fetchStateStatute(stateCode, suggestion, surveyId);
+            // settings.openaiApiKey is needed if we're not in mock mode, but for demo/mock it's fine
+            await fetchStateStatute(stateCode, suggestion, surveyId, true, '', isRetry);
         } catch (error) {
             console.error('Retry failed:', error);
         } finally {
@@ -31,10 +32,10 @@ function RetryButton({ suggestion, stateCode, surveyId }: { suggestion: string; 
         <button
             onClick={handleRetry}
             disabled={isLoading}
-            className="w-full text-left flex items-center justify-between px-3 py-2 bg-background/50 hover:bg-primary/5 border border-transparent hover:border-primary/20 rounded-md text-sm transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`w-full text-left flex items-center justify-between px-3 py-2 ${isRetry ? 'bg-primary/10 border-primary/20 hover:bg-primary/20' : 'bg-background/50 hover:bg-primary/5 border-transparent hover:border-primary/20'} border rounded-md text-sm transition-all group disabled:opacity-50 disabled:cursor-not-allowed`}
         >
-            <span className="text-foreground group-hover:text-primary transition-colors">
-                {suggestion}
+            <span className={`${isRetry ? 'text-primary font-medium' : 'text-foreground group-hover:text-primary'} transition-colors`}>
+                {label || suggestion}
             </span>
             {isLoading ? (
                 <Loader2 className="w-4 h-4 text-primary animate-spin" />
@@ -181,6 +182,17 @@ export default function StatuteDetailPanel() {
                                     <div className="p-4 bg-slate-500/10 border border-slate-500/20 rounded-lg text-slate-600 dark:text-slate-400">
                                         <h3 className="font-semibold mb-1">System Error</h3>
                                         <p className="text-sm">{(selectedStatuteEntry as Error).message}</p>
+
+                                        {/* Primary Retry Button */}
+                                        <div className="mt-4">
+                                            <RetryButton
+                                                suggestion={activeSurvey?.query || ''}
+                                                stateCode={activeStateCode!}
+                                                surveyId={activeSurveyId!}
+                                                isRetry={true}
+                                                label="Retry Search"
+                                            />
+                                        </div>
 
                                         {/* Suggestions Section */}
                                         {selectedStatuteEntry instanceof StatuteErrorWithSuggestions && selectedStatuteEntry.suggestions && selectedStatuteEntry.suggestions.length > 0 && (

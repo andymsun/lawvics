@@ -35,15 +35,26 @@ function getIconColor(iconType: Activity['icon']) {
 export function ActivityDropdown() {
     const [isOpen, setIsOpen] = useState(false);
     const notifications = useNotificationStore((state) => state.notifications);
+    const hasUnread = useNotificationStore((state) => state.hasUnread);
     const clearNotifications = useNotificationStore((state) => state.clearNotifications);
+    const markAsRead = useNotificationStore((state) => state.markAsRead);
 
     const hasNotifications = notifications.length > 0;
+
+    const handleToggle = () => {
+        const wasOpen = isOpen;
+        setIsOpen(!isOpen);
+        // Mark as read when opening (not closing)
+        if (!wasOpen && hasUnread) {
+            markAsRead();
+        }
+    };
 
     return (
         <div className="relative">
             {/* Trigger Button */}
             <button
-                onClick={() => setIsOpen(!isOpen)}
+                onClick={handleToggle}
                 className={cn(
                     'relative p-2 rounded-lg transition-colors',
                     'hover:bg-muted',
@@ -51,7 +62,7 @@ export function ActivityDropdown() {
                 )}
             >
                 <Bell className="h-5 w-5 text-muted-foreground" />
-                {hasNotifications && (
+                {hasUnread && (
                     <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
                 )}
             </button>

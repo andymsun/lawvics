@@ -4,10 +4,11 @@ import React, { useState, useCallback, memo } from "react";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
 import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
-import { useSurveyHistoryStore, useShallow, StatuteEntry, getActiveSessionStatutes } from "@/lib/store";
+import { getActiveSessionStatutes, useShallow, useSurveyHistoryStore, StatuteEntry } from "@/lib/store";
 import { getStateCodeFromGeo } from "@/lib/constants/stateMapping";
 import { StateCode, Statute } from "@/types/statute";
 import StatuteCard from "@/components/ui/StatuteCard";
+import { getStatuteStatus, StatuteStatus } from "@/lib/statute-utils";
 
 const geoUrl = "https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json";
 
@@ -15,34 +16,13 @@ const geoUrl = "https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json";
 // Color Logic
 // ============================================================
 
-type StateStatus = 'idle' | 'loading' | 'success' | 'suspicious' | 'error';
-
-const STATUS_COLORS: Record<StateStatus, string> = {
+const STATUS_COLORS: Record<StatuteStatus, string> = {
     idle: '#D6D6DA',      // Grey
     loading: '#3B82F6',   // Blue
     success: '#22C55E',   // Green
     suspicious: '#EAB308', // Yellow
     error: '#EF4444',     // Red
 };
-
-/**
- * Determine the display status for a state based on its data
- */
-function getStateStatus(entry: StatuteEntry | undefined): StateStatus {
-    if (!entry) return 'idle';
-
-    if (entry instanceof Error) return 'error';
-
-    // Check trustLevel first (includes domain verification status)
-    if (entry.trustLevel === 'suspicious' || entry.trustLevel === 'unverified') {
-        return 'suspicious';
-    }
-
-    // Fallback: check confidence for trust level approximation
-    if (entry.confidenceScore < 70) return 'suspicious';
-
-    return 'success';
-}
 
 // ============================================================
 // Memoized State Path Component
@@ -58,7 +38,7 @@ interface GeoObject {
     [key: string]: unknown;
 }
 
-const StatePath = memo(function StatePath({ geo, stateCode, status, onClick }: { geo: GeoObject; stateCode: StateCode | null; status: StateStatus; onClick: (stateCode: StateCode) => void }) {
+const StatePath = memo(function StatePath({ geo, stateCode, status, onClick }: { geo: GeoObject; stateCode: StateCode | null; status: StatuteStatus; onClick: (stateCode: StateCode) => void }) {
     const fill = STATUS_COLORS[status];
     const isLoading = status === 'loading';
 
@@ -198,18 +178,11 @@ const InteractiveMap = () => {
                             const stateCode = getStateCodeFromGeo(geo);
 
                             // Determine status for this state
-                            let status: StateStatus = 'idle';
+                            let status: StatuteStatus = 'idle';
 
                             if (stateCode) {
                                 const entry = activeStatutes[stateCode];
-
-                                if (entry) {
-                                    // We have data for this state
-                                    status = getStateStatus(entry);
-                                } else if (isLoading) {
-                                    // Survey is running but we don't have data yet
-                                    status = 'loading';
-                                }
+                                status = getStatuteStatus(entry, isLoading);
                             }
 
                             return (

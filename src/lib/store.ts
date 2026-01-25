@@ -79,12 +79,14 @@ export interface Activity {
 
 interface NotificationStoreState {
     notifications: Activity[];
+    hasUnread: boolean;
 }
 
 interface NotificationStoreActions {
     addNotification: (notification: Omit<Activity, 'id' | 'timestamp'>) => void;
     clearNotifications: () => void;
     removeNotification: (id: number) => void;
+    markAsRead: () => void;
 }
 
 export type NotificationStore = NotificationStoreState & NotificationStoreActions;
@@ -93,6 +95,7 @@ let notificationId = 0;
 
 export const useNotificationStore = create<NotificationStore>((set) => ({
     notifications: [],
+    hasUnread: false,
 
     addNotification: (notification) =>
         set((state) => ({
@@ -104,9 +107,12 @@ export const useNotificationStore = create<NotificationStore>((set) => ({
                 },
                 ...state.notifications,
             ].slice(0, 20), // Keep max 20 notifications
+            hasUnread: true,
         })),
 
-    clearNotifications: () => set({ notifications: [] }),
+    clearNotifications: () => set({ notifications: [], hasUnread: false }),
+
+    markAsRead: () => set({ hasUnread: false }),
 
     removeNotification: (id) =>
         set((state) => ({
@@ -131,6 +137,8 @@ export interface SurveyRecord {
     status: 'running' | 'completed' | 'failed' | 'cancelled';
     /** Per-session statute data - each survey owns its results */
     statutes: Partial<Record<StateCode, StatuteEntry>>;
+    /** AI-generated executive summary for this survey */
+    briefSummary?: string;
 }
 
 interface SurveyHistoryState {
@@ -150,10 +158,11 @@ interface SurveyHistoryActions {
     /** Set an error for a specific session */
     setSessionError: (surveyId: number, stateCode: StateCode, error: Error) => void;
     /** Cancel a running survey */
-    /** Cancel a running survey */
     cancelSurvey: (id: number) => void;
     /** Delete a survey from history */
     deleteSurvey: (id: number) => void;
+    /** Set the AI-generated brief summary for a survey */
+    setBriefSummary: (surveyId: number, summary: string) => void;
 }
 
 export type SurveyHistoryStore = SurveyHistoryState & SurveyHistoryActions;
@@ -260,6 +269,13 @@ export const useSurveyHistoryStore = create<SurveyHistoryStore>()(
                     activeSurveyId: state.activeSurveyId === id ? null : state.activeSurveyId,
                 }));
             },
+
+            setBriefSummary: (surveyId, summary) =>
+                set((state) => ({
+                    surveys: state.surveys.map((s) =>
+                        s.id === surveyId ? { ...s, briefSummary: summary } : s
+                    ),
+                })),
 
             // UI Actions
             setActiveState: (code) => set({ activeStateCode: code }),

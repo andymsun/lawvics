@@ -29,7 +29,7 @@ const DEFAULT_MOCK_MODE = true;
  * Check if a query is a demo query that uses hardcoded data.
  * Demo queries should be processed one state at a time for smooth animation.
  */
-function isDemoQuery(query: string): boolean {
+export function isDemoQuery(query: string): boolean {
     const ql = query.toLowerCase();
     const isAdversePossession = ql.includes('adverse possession');
     const isFraudSol = ql.includes('fraud') && (ql.includes('statute of limitations') || ql.includes('sol') || ql.includes('time limit'));
@@ -337,16 +337,31 @@ export async function fetchStateStatute(
     query: string,
     surveyId: number,
     useMockMode: boolean = DEFAULT_MOCK_MODE,
-    openaiApiKey: string = ''
+    openaiApiKey: string = '',
+    isRetry: boolean = false
 ): Promise<boolean> {
     const surveyStore = useSurveyHistoryStore.getState();
     const settings = useSettingsStore.getState();
 
     try {
-        // 1. Fetch the statute from API or local mock
+        // 1. Handle Demo Queries Locally (Client-Side)
+        if (isDemoQuery(query)) {
+            // Artificial delay for feel
+            await new Promise(resolve => setTimeout(resolve, 800));
+
+            const demoStatute = getDemoStatute(stateCode, query, isRetry);
+            if (demoStatute) {
+                surveyStore.setSessionStatute(surveyId, stateCode, demoStatute);
+                return true;
+            } else {
+                throw new Error("No data found");
+            }
+        }
+
+        // 2. Fetch the statute from API or local mock
         let statute = await fetchStatuteFromApi(stateCode, query, useMockMode, openaiApiKey);
 
-        // 2. Optional Auto-Verification (Paranoid Mode)
+        // 3. Optional Auto-Verification (Paranoid Mode)
         if (settings.autoVerify && !useMockMode) {
             try {
                 // Determine which model to use for verification
@@ -372,16 +387,13 @@ export async function fetchStateStatute(
                 statute = {
                     ...statute,
                     trustLevel: verification.trustLevel,
-                    // Optionally update snippet if verification adds more content? 
-                    // For now just trust the metadata.
                 };
             } catch (vError) {
                 console.warn(`Auto-verification failed for ${stateCode}:`, vError);
-                // We keep the statute but maybe it stays 'unverified'
             }
         }
 
-        // 3. Update survey session with successful result
+        // 4. Update survey session with successful result
         surveyStore.setSessionStatute(surveyId, stateCode, statute);
         return true;
     } catch (error) {
@@ -434,7 +446,7 @@ async function processChunk(
                 successes++;
             } else {
                 // Should not happen if demo data is complete, but fallback safely
-                surveyStore.setSessionError(surveyId, stateCode, new Error(`No demo data found for ${stateCode}`));
+                surveyStore.setSessionError(surveyId, stateCode, new Error("No data found"));
                 errors++;
             }
         }

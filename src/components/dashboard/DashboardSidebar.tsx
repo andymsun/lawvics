@@ -26,13 +26,13 @@ export function DashboardSidebar({ activeTab = 'workspace' }: DashboardSidebarPr
     const totalSuccess = surveys.reduce((acc, s) => acc + s.successCount, 0);
     const totalErrors = surveys.reduce((acc, s) => acc + s.errorCount, 0);
 
-    // Calculate Risk (Low confidence or Suspicious)
-    const totalRisk = surveys.reduce((acc, survey) => {
-        const riskInSurvey = Object.values(survey.statutes || {}).filter(entry => {
+    // Calculate Unverified count (Low confidence, suspicious, or unverified trustLevel)
+    const totalUnverified = surveys.reduce((acc, survey) => {
+        const unverifiedInSurvey = Object.values(survey.statutes || {}).filter(entry => {
             if (!entry || entry instanceof Error) return false;
-            return entry.confidenceScore < 85 || entry.trustLevel === 'suspicious';
+            return entry.trustLevel === 'suspicious' || entry.trustLevel === 'unverified' || entry.confidenceScore < 70;
         }).length;
-        return acc + riskInSurvey;
+        return acc + unverifiedInSurvey;
     }, 0);
 
     const successRate = totalSuccess + totalErrors > 0
@@ -110,13 +110,13 @@ export function DashboardSidebar({ activeTab = 'workspace' }: DashboardSidebarPr
                         <span className="text-sm font-semibold text-green-500">{totalSuccess}</span>
                     </div>
 
-                    {/* At Risk */}
+                    {/* Unverified */}
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <AlertCircle className="w-4 h-4" />
-                            At Risk
+                            Unverified
                         </div>
-                        <span className="text-sm font-semibold text-risk">{totalRisk}</span>
+                        <span className="text-sm font-semibold text-risk">{totalUnverified}</span>
                     </div>
 
                     {/* Errors */}

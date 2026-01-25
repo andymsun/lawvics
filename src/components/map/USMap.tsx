@@ -5,6 +5,7 @@ import { ComposableMap, Geographies, Geography } from 'react-simple-maps';
 import { X } from 'lucide-react';
 import { useSurveyHistoryStore, useShallow, StatuteEntry } from '@/lib/store';
 import { StateCode } from '@/types/statute';
+import { getStatuteStatus, StatuteStatus } from '@/lib/statute-utils';
 
 // TopoJSON CDN URL for US states
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json';
@@ -137,11 +138,12 @@ export default function USMap({ onStateClick }: USMapProps) {
 
         // Count analyzed states
         Object.values(statutes).forEach(entry => {
-            if (entry instanceof Error) {
+            const status = getStatuteStatus(entry);
+            if (status === 'error') {
                 counts.error++;
-            } else if (entry.trustLevel === 'suspicious' || entry.trustLevel === 'unverified' || entry.confidenceScore < 70) {
+            } else if (status === 'suspicious') {
                 counts.unverified++;
-            } else {
+            } else if (status === 'success') {
                 counts.verified++;
             }
         });
@@ -193,33 +195,25 @@ export default function USMap({ onStateClick }: USMapProps) {
             if (!stateCode) return colors.idle;
 
             const entry = statutes[stateCode];
-
-            // If we are running a survey and don't have this state yet, show as loading if active
             const isRunning = activeSession?.status === 'running';
+
+            // Allow getStatuteStatus to handle 'loading' if we wanted per-state loading, 
+            // but for map we rely on the session running check for general visualization if needed.
+            // Actually, let's use the explicit logic we had but powered by the utility for status.
+
             if (!entry && isRunning) {
-                // Optional: Only show some random loading states or all remaining?
-                // For now, keep them idle until processed to match linear progress
-                return colors.idle;
+                return colors.idle; // Keep original behavior
             }
 
-            if (!entry) return colors.idle;
+            const status = getStatuteStatus(entry, isRunning);
 
-            // Check if it's an Error
-            if (entry instanceof Error) {
-                return colors.error;
+            switch (status) {
+                case 'error': return colors.error;
+                case 'suspicious': return colors.suspicious;
+                case 'success': return colors.success;
+                case 'loading': return colors.loading; // Should typically not be hit here due to above check, but safe fallback
+                default: return colors.idle;
             }
-
-            // It's a Statute - check trust level
-            if (entry.trustLevel === 'suspicious' || entry.trustLevel === 'unverified') {
-                return colors.suspicious;
-            }
-
-            // Fallback for missing trustLevel based on confidence
-            if (entry.confidenceScore < 70) {
-                return colors.suspicious;
-            }
-
-            return colors.success;
         },
         [statutes, colors, activeSession?.status]
     );

@@ -52,18 +52,36 @@ export async function POST(req: NextRequest) {
             aiModel = openai(model || 'gpt-4o-mini');
         }
 
-        // Construct Prompt
+        // Construct structured prompt matching brief format
         const statutesText = statutes.slice(0, 10).join('\n\n---\n\n'); // Limit to 10 for token safety
-        const prompt = `
-You are a legal research assistant. Synthesize the following statute snippets into a concise, professional executive summary.
-Focus on the common themes, key regulations, and any notable exceptions found in the text.
-Do not hallucinate. If the text is insufficient, state that.
+        const prompt = `You are a legal research analyst. Generate an executive summary for exported statute research.
 
-STATUTES:
+STATUTES TO SUMMARIZE:
 ${statutesText}
 
-SUMMARY:
-`;
+INSTRUCTIONS:
+Write a structured executive summary using this EXACT markdown format:
+
+## Executive Summary
+
+**Legal Landscape Overview**
+[1 paragraph describing majority vs minority approaches, general patterns across jurisdictions]
+
+**Key Findings & Notable Variations**
+• **[Category 1]**: [specific finding with jurisdiction examples]
+• **[Category 2]**: [specific finding with jurisdiction examples]
+• **[Category 3]**: [specific finding with jurisdiction examples]
+
+**Compliance Recommendations**
+[1 paragraph with practical guidance for multi-jurisdiction operations]
+
+RULES:
+- Use ## for the title, **bold** for section headers
+- Use bullet points (•) with **bold** labels for key findings
+- Include specific jurisdiction codes where relevant
+- Be concise and professional
+- NO preamble or commentary outside the structure
+- If insufficient data, state that briefly`;
 
         const { text } = await generateText({
             model: aiModel,

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSurveyHistoryStore, useShallow, StatuteEntry } from '@/lib/store';
 import { StateCode } from '@/types/statute';
-import { Map, Table2, BarChart3, Settings } from 'lucide-react';
+import { Map, Table2, BarChart3, FileText, Settings } from 'lucide-react';
 import ActivityDropdown from '@/components/dashboard/ActivityDropdown';
 import DashboardSidebar from '@/components/dashboard/DashboardSidebar';
 import SurveyHistory from '@/components/dashboard/SurveyHistory';
@@ -41,6 +41,7 @@ export default function DashboardLayout({
         { id: 'geospatial', label: 'Geospatial', icon: Map, href: '/dashboard' },
         { id: 'matrix', label: 'Matrix View', icon: Table2, href: '/dashboard/matrix' },
         { id: 'analytics', label: 'Analytics', icon: BarChart3, href: '/dashboard/analytics' },
+        { id: 'brief', label: 'Brief', icon: FileText, href: '/dashboard/brief' },
     ];
 
     // Helper to determine if a tab is active

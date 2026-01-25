@@ -1083,6 +1083,61 @@ const DEMO_DATA: Record<DemoQuery, Partial<Record<StateCode, DemoStatuteData>>> 
 };
 
 // =============================================================================
+// RETRY DEMO DATA (Pre-prepped data for demo retries)
+// =============================================================================
+
+const RETRY_DEMO_DATA: Record<DemoQuery, Partial<Record<StateCode, DemoStatuteData>>> = {
+    adverse_possession: {
+        DE: {
+            citation: 'Del. Code tit. 10, § 7901',
+            textSnippet: 'Delaware requires 20 years of continuous adverse possession.',
+            effectiveDate: '2022-03-10',
+            confidenceScore: 94,
+            sourceUrl: 'https://legis.delaware.gov/',
+        },
+        HI: {
+            citation: 'Haw. Rev. Stat. § 657-31',
+            textSnippet: 'Hawaii requires 20 years of continuous adverse possession.',
+            effectiveDate: '2021-11-20',
+            confidenceScore: 93,
+            sourceUrl: 'https://www.capitol.hawaii.gov/',
+        }
+    },
+    fraud_sol: {
+        AK: {
+            citation: 'Alaska Stat. § 09.10.070',
+            textSnippet: 'Alaska statute of limitations for fraud is 2 years from discovery.',
+            effectiveDate: '2023-01-15',
+            confidenceScore: 94,
+            sourceUrl: 'https://www.akleg.gov/',
+        },
+        VT: {
+            citation: 'Vt. Stat. tit. 12, § 511',
+            textSnippet: 'Vermont statute of limitations for fraud is 6 years from discovery.',
+            effectiveDate: '2022-05-18',
+            confidenceScore: 94,
+            sourceUrl: 'https://legislature.vermont.gov/',
+        }
+    },
+    gta_threshold: {
+        RI: {
+            citation: 'R.I. Gen. Laws § 11-41-1',
+            textSnippet: 'Rhode Island felony theft threshold is $1,500. Larceny of property valued at $1,500 or more is a felony.',
+            effectiveDate: '2024-02-12',
+            confidenceScore: 93,
+            sourceUrl: 'http://www.rilegislature.gov/',
+        },
+        WY: {
+            citation: 'Wyo. Stat. § 6-3-402',
+            textSnippet: 'Wyoming felony theft threshold is $1,000. Larceny of property valued at $1,000 or more is a felony.',
+            effectiveDate: '2023-05-04',
+            confidenceScore: 94,
+            sourceUrl: 'https://www.wyoleg.gov/',
+        }
+    }
+};
+
+// =============================================================================
 // Query Normalization (must be after DEMO_DATA for hoisting)
 // =============================================================================
 
@@ -1156,11 +1211,17 @@ function generateGoogleSearchUrl(citation: string, stateCode: StateCode): string
 // Demo Statute Lookup
 // =============================================================================
 
-export function getDemoStatute(stateCode: StateCode, query: string): Statute | null {
+export function getDemoStatute(stateCode: StateCode, query: string, isRetry: boolean = false): Statute | null {
     const demoType = normalizeQueryForDemo(query);
     if (!demoType) return null;
 
-    const stateData = DEMO_DATA[demoType]?.[stateCode];
+    let stateData = DEMO_DATA[demoType]?.[stateCode];
+
+    // If it's a retry and we don't have main data, check retry-specific data
+    if (isRetry && !stateData) {
+        stateData = RETRY_DEMO_DATA[demoType]?.[stateCode];
+    }
+
     if (!stateData) return null;
 
     // Determine trust level based on domain verification

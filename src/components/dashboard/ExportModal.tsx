@@ -70,32 +70,168 @@ export function ExportModal({ isOpen, onClose, data }: ExportModalProps) {
             const settings = useSettingsStore.getState();
             const statutesText = items.map(item => getExportContent(item)).filter(t => t.length > 0);
 
+            // Use system-api mode if enabled
+            const isSystemApi = settings.dataSource === 'system-api';
+
             const response = await fetch('/api/statute/summary', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-data-source': settings.dataSource,
+                },
                 body: JSON.stringify({
                     statutes: statutesText,
-                    provider: settings.activeAiProvider,
-                    model: settings.activeAiProvider === 'openai' ? settings.openaiModel :
-                        settings.activeAiProvider === 'gemini' ? settings.geminiModel :
-                            settings.openRouterModel,
-                    openaiApiKey: settings.openaiApiKey,
-                    geminiApiKey: settings.geminiApiKey,
-                    openRouterApiKey: settings.openRouterApiKey,
+                    dataSource: settings.dataSource,
+                    provider: isSystemApi ? 'openrouter' : settings.activeAiProvider,
+                    model: isSystemApi ? 'openai/gpt-4o-mini' : (
+                        settings.activeAiProvider === 'openai' ? settings.openaiModel :
+                            settings.activeAiProvider === 'gemini' ? settings.geminiModel :
+                                settings.openRouterModel
+                    ),
+                    openaiApiKey: isSystemApi ? undefined : settings.openaiApiKey,
+                    geminiApiKey: isSystemApi ? undefined : settings.geminiApiKey,
+                    openRouterApiKey: settings.openRouterApiKey, // Always send as potential override
                 }),
             });
 
             const data = await response.json();
             if (data.success) {
-                return `AI OVERVIEW SUMMARY\n\n${data.summary}\n\n---\n\n`;
+                return data.summary;
             } else {
                 console.error("Summary generation failed:", data.error);
-                return `AI OVERVIEW SUMMARY\n\n(Summary generation failed: ${data.error})\n\n---\n\n`;
+                return `(Summary generation failed: ${data.error})`;
             }
         } catch (error) {
             console.error("Summary generation error:", error);
-            return `AI OVERVIEW SUMMARY\n\n(Summary generation failed)\n\n---\n\n`;
+            return `(Summary generation failed)`;
         }
+    };
+
+    // Helper to render markdown-formatted text to PDF
+    const renderMarkdownToPdf = (doc: jsPDF, text: string, startY: number, maxWidth: number): number => {
+        let y = startY;
+        const lineHeight = 7;
+        const pageHeight = 280;
+
+        // Split by lines
+        const lines = text.split('\n');
+
+        for (const line of lines) {
+            // Check for page break
+            if (y > pageHeight) {
+                doc.addPage();
+                y = 20;
+            }
+
+            // ## Heading
+            if (line.startsWith('## ')) {
+                doc.setFontSize(16);
+                doc.setFont('helvetica', 'bold');
+                const heading = line.replace('## ', '');
+                doc.text(heading, 20, y);
+                y += lineHeight + 4;
+                doc.setFontSize(12);
+                continue;
+            }
+
+            // **Bold section header** at start of line
+            if (line.startsWith('**') && line.includes('**')) {
+                const match = line.match(/^\*\*(.+?)\*\*(.*)/);
+                if (match) {
+                    doc.setFont('helvetica', 'bold');
+                    doc.text(match[1], 20, y);
+                    if (match[2]) {
+                        doc.setFont('helvetica', 'normal');
+                        const restText = doc.splitTextToSize(match[2], maxWidth - 20);
+                        const boldWidth = doc.getTextWidth(match[1]);
+                        doc.text(restText[0] || '', 20 + boldWidth, y);
+                        y += lineHeight;
+                        for (let i = 1; i < restText.length; i++) {
+                            if (y > pageHeight) { doc.addPage(); y = 20; }
+                            doc.text(restText[i], 20, y);
+                            y += lineHeight;
+                        }
+                    } else {
+                        y += lineHeight;
+                    }
+                    continue;
+                }
+            }
+
+            // Bullet points: • **Label**: Content
+            if (line.startsWith('• ') || line.startsWith('- ')) {
+                const bulletContent = line.replace(/^[•\-] /, '');
+                const boldMatch = bulletContent.match(/^\*\*(.+?)\*\*:?\s*(.*)/);
+
+                if (boldMatch) {
+                    // Bullet with bold label
+                    doc.setFont('helvetica', 'normal');
+                    doc.text('•', 20, y);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text(boldMatch[1] + ':', 28, y);
+                    doc.setFont('helvetica', 'normal');
+                    const labelWidth = doc.getTextWidth(boldMatch[1] + ': ');
+                    const restContent = doc.splitTextToSize(boldMatch[2], maxWidth - 28 - labelWidth);
+                    doc.text(restContent[0] || '', 28 + labelWidth, y);
+                    y += lineHeight;
+                    for (let i = 1; i < restContent.length; i++) {
+                        if (y > pageHeight) { doc.addPage(); y = 20; }
+                        doc.text(restContent[i], 35, y);
+                        y += lineHeight;
+                    }
+                } else {
+                    // Plain bullet
+                    doc.setFont('helvetica', 'normal');
+                    doc.text('•', 20, y);
+                    const bulletText = doc.splitTextToSize(bulletContent, maxWidth - 15);
+                    doc.text(bulletText[0] || '', 28, y);
+                    y += lineHeight;
+                    for (let i = 1; i < bulletText.length; i++) {
+                        if (y > pageHeight) { doc.addPage(); y = 20; }
+                        doc.text(bulletText[i], 28, y);
+                        y += lineHeight;
+                    }
+                }
+                continue;
+            }
+
+            // Empty line
+            if (line.trim() === '') {
+                y += lineHeight / 2;
+                continue;
+            }
+
+            // Regular paragraph with inline bold
+            doc.setFont('helvetica', 'normal');
+            const parts = line.split(/(\*\*[^*]+\*\*)/);
+            let xPos = 20;
+            for (const part of parts) {
+                if (part.startsWith('**') && part.endsWith('**')) {
+                    doc.setFont('helvetica', 'bold');
+                    const boldText = part.slice(2, -2);
+                    doc.text(boldText, xPos, y);
+                    xPos += doc.getTextWidth(boldText);
+                    doc.setFont('helvetica', 'normal');
+                } else if (part) {
+                    const wrapped = doc.splitTextToSize(part, maxWidth - (xPos - 20));
+                    doc.text(wrapped[0] || '', xPos, y);
+                    if (wrapped.length > 1) {
+                        y += lineHeight;
+                        for (let i = 1; i < wrapped.length; i++) {
+                            if (y > pageHeight) { doc.addPage(); y = 20; }
+                            doc.text(wrapped[i], 20, y);
+                            y += lineHeight;
+                        }
+                        xPos = 20;
+                    } else {
+                        xPos += doc.getTextWidth(wrapped[0] || '');
+                    }
+                }
+            }
+            if (xPos > 20) y += lineHeight;
+        }
+
+        return y;
     };
 
     const handleExport = async (format: 'pdf' | 'docx' | 'gdoc') => {
@@ -122,17 +258,10 @@ export function ExportModal({ isOpen, onClose, data }: ExportModalProps) {
 
                 let y = 40;
 
-                // Add Summary if included
-                if (includeSummary) {
-                    doc.setFontSize(14);
-                    doc.setFont('helvetica', 'bold');
-                    doc.text("AI Overview Summary", 20, y);
-                    y += 10;
-                    doc.setFontSize(12);
-                    doc.setFont('helvetica', 'italic');
-                    const splitSummary = doc.splitTextToSize(summaryText.replace("AI OVERVIEW SUMMARY\n\n", "").replace("\n\n---\n\n", ""), 170);
-                    doc.text(splitSummary, 20, y);
-                    y += (splitSummary.length * 7) + 20;
+                // Add Summary if included (with markdown rendering)
+                if (includeSummary && summaryText) {
+                    y = renderMarkdownToPdf(doc, summaryText, y, 170);
+                    y += 15; // Space after summary
                 }
 
                 doc.setFontSize(12);
@@ -183,27 +312,61 @@ export function ExportModal({ isOpen, onClose, data }: ExportModalProps) {
                     }),
                 ];
 
-                if (includeSummary) {
-                    children.push(
-                        new Paragraph({
-                            children: [
-                                new TextRun({
-                                    text: "AI Overview Summary",
-                                    bold: true,
-                                    size: 28,
-                                }),
-                            ],
-                            spacing: { before: 400, after: 200 },
-                        }),
-                        new Paragraph({
-                            children: [
-                                new TextRun({
-                                    text: summaryText.replace("AI OVERVIEW SUMMARY\n\n", "").replace("\n\n---\n\n", ""),
-                                    italics: true,
-                                }),
-                            ],
-                        })
-                    );
+                if (includeSummary && summaryText) {
+                    // Parse markdown into DOCX paragraphs
+                    const summaryLines = summaryText.split('\n');
+                    for (const line of summaryLines) {
+                        if (line.trim() === '') continue;
+
+                        // ## Heading
+                        if (line.startsWith('## ')) {
+                            children.push(new Paragraph({
+                                children: [new TextRun({ text: line.replace('## ', ''), bold: true, size: 28 })],
+                                spacing: { before: 300, after: 100 },
+                            }));
+                        }
+                        // **Bold section header**
+                        else if (line.startsWith('**') && line.includes('**')) {
+                            const match = line.match(/^\*\*(.+?)\*\*(.*)/);
+                            if (match) {
+                                children.push(new Paragraph({
+                                    children: [
+                                        new TextRun({ text: match[1], bold: true }),
+                                        new TextRun({ text: match[2] || '' }),
+                                    ],
+                                    spacing: { before: 200, after: 100 },
+                                }));
+                            }
+                        }
+                        // Bullet points
+                        else if (line.startsWith('• ') || line.startsWith('- ')) {
+                            const bulletContent = line.replace(/^[•\-] /, '');
+                            const boldMatch = bulletContent.match(/^\*\*(.+?)\*\*:?\s*(.*)/);
+                            if (boldMatch) {
+                                children.push(new Paragraph({
+                                    bullet: { level: 0 },
+                                    children: [
+                                        new TextRun({ text: boldMatch[1] + ': ', bold: true }),
+                                        new TextRun({ text: boldMatch[2] || '' }),
+                                    ],
+                                }));
+                            } else {
+                                children.push(new Paragraph({
+                                    bullet: { level: 0 },
+                                    children: [new TextRun({ text: bulletContent })],
+                                }));
+                            }
+                        }
+                        // Regular paragraph
+                        else {
+                            children.push(new Paragraph({
+                                children: [new TextRun({ text: line })],
+                            }));
+                        }
+                    }
+
+                    // Separator after summary
+                    children.push(new Paragraph({ children: [], spacing: { before: 300 } }));
                 }
 
                 children.push(...selectedItems.flatMap(item => [

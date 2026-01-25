@@ -18,6 +18,7 @@ Functional Purity: UI components should be pure functions of their props. Side e
 *   **Feature**: Batch Settings (Completed)
 *   **Feature**: Landing Page Chat Box (Completed) -- Replaced launch button with search input that auto-starts survey on dashboard.
 *   **Feature**: Rotating Search Placeholders (Completed) -- Landing page search input rotates generically through prompts (6s interval, 0.3s fade) with smooth fading animation. Fixed visibility issue by adjusting DOM order.
+*   **Feature**: Brief Tab (Completed) -- Added 4th tab next to Analytics for 50-state survey briefs. Includes AI-powered executive summary generation, regional coverage breakdown, and state-by-state results table.
 *   **Style**: Search Input Polish (Completed) -- Removed blue focus glow, added monochrome outline (slate-600/white).
 *   **Fix**: History Status Display (Completed) -- Separated "Unverified" (Yellow) from "Critical Risk" (Red) in history view.
 *   **Fix**: Data Source Label (Completed) -- "System API" mode now displays "Lawvics Proprietary Systems" instead of "Mock Data".
