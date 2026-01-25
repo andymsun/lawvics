@@ -71,34 +71,34 @@ interface MapLegendProps {
         pending: number;
         loading: number;
         verified: number;
-        risk: number;
+        unverified: number;
         error: number;
     };
 }
 
 function MapLegend({ colors, counts }: MapLegendProps) {
     return (
-        <div className="absolute bottom-4 right-4 flex flex-col items-start gap-2.5 px-3 py-3 rounded-xl bg-background/30 backdrop-blur-md border border-white/10 shadow-2xl z-30">
+        <div className="absolute bottom-4 right-4 flex flex-col items-start gap-2.5 px-3 py-3 rounded-xl bg-card/50 backdrop-blur-md border border-border shadow-2xl z-30">
             <h3 className="text-[9px] uppercase tracking-widest font-bold text-muted-foreground mb-0.5 select-none">Status</h3>
             <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full" style={{ background: colors.idle }} />
-                <span className="text-[10px] font-medium text-white/80">Pending ({counts.pending})</span>
+                <span className="text-[10px] font-medium text-foreground/80">Pending ({counts.pending})</span>
             </div>
             <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: colors.loading }} />
-                <span className="text-[10px] font-medium text-white/80">Loading ({counts.loading})</span>
+                <span className="text-[10px] font-medium text-foreground/80">Loading ({counts.loading})</span>
             </div>
             <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full" style={{ background: colors.success }} />
-                <span className="text-[10px] font-medium text-white/80">Verified ({counts.verified})</span>
+                <span className="text-[10px] font-medium text-foreground/80">Verified ({counts.verified})</span>
             </div>
             <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full" style={{ background: colors.suspicious }} />
-                <span className="text-[10px] font-medium text-white/80">Risk ({counts.risk})</span>
+                <span className="text-[10px] font-medium text-foreground/80">Unverified ({counts.unverified})</span>
             </div>
             <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full" style={{ background: colors.error }} />
-                <span className="text-[10px] font-medium text-white/80">Error ({counts.error})</span>
+                <span className="text-[10px] font-medium text-foreground/80">Error ({counts.error})</span>
             </div>
         </div>
     );
@@ -127,7 +127,7 @@ export default function USMap({ onStateClick }: USMapProps) {
             pending: 0,
             loading: 0,
             verified: 0,
-            risk: 0,
+            unverified: 0,
             error: 0
         };
 
@@ -140,7 +140,7 @@ export default function USMap({ onStateClick }: USMapProps) {
             if (entry instanceof Error) {
                 counts.error++;
             } else if (entry.trustLevel === 'suspicious' || entry.trustLevel === 'unverified' || entry.confidenceScore < 70) {
-                counts.risk++;
+                counts.unverified++;
             } else {
                 counts.verified++;
             }
@@ -309,10 +309,10 @@ export default function USMap({ onStateClick }: USMapProps) {
                 onMouseLeave={handleMouseUp}
             >
                 {/* Floating Controls Bar */}
-                <div className="absolute top-4 left-4 right-4 z-30 flex items-center justify-between px-4 py-1.5 rounded-xl bg-background/20 backdrop-blur-md border border-white/10 shadow-2xl">
+                <div className="absolute top-4 left-4 right-4 z-30 flex items-center justify-between px-4 py-1.5 rounded-xl bg-card/80 backdrop-blur-md border border-border/50 shadow-lg">
                     <div className="flex items-center gap-4">
-                        <div className="text-xs font-medium text-muted-foreground/80 tracking-wide select-none">
-                            PROGRESS <span className="text-white font-bold ml-1">{analyzedCount}/50 ({percentComplete}%)</span>
+                        <div className="text-xs font-medium text-muted-foreground tracking-wide select-none">
+                            PROGRESS <span className="text-foreground font-bold ml-1">{analyzedCount}/50 ({percentComplete}%)</span>
                         </div>
                         {activeSession?.status === 'running' && (
                             <button
@@ -327,8 +327,8 @@ export default function USMap({ onStateClick }: USMapProps) {
 
                     {/* Current Query Display */}
                     {activeSession?.query && (
-                        <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 px-3 py-1 bg-background/40 backdrop-blur-md rounded-full border border-white/10 shadow-sm text-xs font-medium text-white max-w-sm lg:max-w-md truncate items-baseline gap-2">
-                            <span className="text-white/60 uppercase text-[10px] tracking-wider font-bold">Query</span>
+                        <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 px-3 py-1 bg-background/50 backdrop-blur-md rounded-full border border-border text-xs font-medium text-foreground max-w-sm lg:max-w-md truncate items-baseline gap-2">
+                            <span className="text-muted-foreground uppercase text-[10px] tracking-wider font-bold">Query</span>
                             <span className="truncate">&ldquo;{activeSession.query}&rdquo;</span>
                         </div>
                     )}
@@ -337,27 +337,27 @@ export default function USMap({ onStateClick }: USMapProps) {
                     <div className="flex items-center gap-2">
                         <button
                             onClick={() => setZoom((z) => Math.min(4, z + 0.25))}
-                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-base font-medium transition-all backdrop-blur-sm border border-white/5"
+                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-muted text-foreground hover:bg-muted/80 text-base font-medium transition-all backdrop-blur-sm border border-border"
                             title="Zoom In"
                         >
                             +
                         </button>
-                        <span className="text-[10px] text-white/60 min-w-[2.5rem] text-center font-mono">
+                        <span className="text-[10px] text-muted-foreground min-w-[2.5rem] text-center font-mono">
                             {Math.round(zoom * 100)}%
                         </span>
                         <button
                             onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))}
-                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-base font-medium transition-all backdrop-blur-sm border border-white/5"
+                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-muted text-foreground hover:bg-muted/80 text-base font-medium transition-all backdrop-blur-sm border border-border"
                             title="Zoom Out"
                         >
                             −
                         </button>
 
-                        <div className="w-px h-4 bg-white/10 mx-1" /> {/* Vertical divider */}
+                        <div className="w-px h-4 bg-border mx-1" /> {/* Vertical divider */}
 
                         <button
                             onClick={handleReset}
-                            className="px-2 py-1 text-[10px] font-medium text-white/50 hover:text-white hover:bg-white/10 rounded-md transition-all uppercase tracking-wider"
+                            className="px-2 py-1 text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md transition-all uppercase tracking-wider"
                             title="Reset View"
                         >
                             RESET

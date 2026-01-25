@@ -37,6 +37,11 @@ export interface Statute {
   sourceUrl: string;
 
   /**
+   * Google search URL for the citation (fallback for verification).
+   */
+  googleSearchUrl?: string;
+
+  /**
    * Optional override for trust level (useful for mock/chaos modes).
    */
   trustLevel?: 'verified' | 'unverified' | 'suspicious';

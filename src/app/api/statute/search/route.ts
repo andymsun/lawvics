@@ -9,6 +9,7 @@ import { SYSTEM_CONFIG } from '@/lib/config';
 // import { PlaywrightCrawler } from 'crawlee'; // Removed for Edge compatibility
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { getDemoStatute } from '@/data/demo-statutes';
 
 // Force edge runtime for Cloudflare Pages
 export const runtime = 'edge';
@@ -482,6 +483,34 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
         if (!stateCode || !query) {
             debug.error('Missing required fields:', { stateCode: !!stateCode, query: !!query });
             return NextResponse.json({ success: false, error: 'Missing stateCode or query' }, { status: 400 });
+        }
+
+        // ============================================================
+        // DEMO MODE: Researched hardcoded responses for specific queries
+        // Uses staggered timing to create smooth 10-second map animation
+        // ============================================================
+        const demoResult = getDemoStatute(stateCode, query);
+        if (demoResult) {
+            debug.log('Using DEMO hardcoded data for:', query.substring(0, 50));
+
+            // Derive stateIndex from state code position (alphabetical order)
+            const ALL_STATES: StateCode[] = [
+                'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+                'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+                'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+                'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI',
+                'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
+            ];
+            const stateIndex = ALL_STATES.indexOf(stateCode);
+
+            // Calculate delay: spread 50 states across ~9 seconds + random jitter
+            // Each state gets a base delay of (stateIndex / 50) * 9000ms + random 0-400ms
+            const baseDelay = stateIndex >= 0 ? Math.floor((stateIndex / 50) * 9000) : 0;
+            const jitter = Math.floor(Math.random() * 400);
+            const totalDelay = baseDelay + jitter + 100; // Min 100ms delay
+
+            await new Promise(r => setTimeout(r, totalDelay));
+            return NextResponse.json({ success: true, data: demoResult });
         }
 
         const dataSource = request.headers.get('x-data-source') || 'system-api';

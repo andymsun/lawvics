@@ -6,6 +6,7 @@ import { generateStateQueries } from './translator';
 import { verifyStatute, verifyStatuteV2 } from './auditor';
 import { generateStatuteSuggestions, StatuteErrorWithSuggestions } from './suggester';
 import { Statute as LegalStatute } from '@/types/legal';
+import { getDemoStatute } from '@/data/demo-statutes';
 
 // ============================================================
 // Configuration
@@ -19,6 +20,22 @@ const INTER_CHUNK_DELAY_MS = 1500;
 
 /** Default mock mode setting (can be overridden by caller) */
 const DEFAULT_MOCK_MODE = true;
+
+// ============================================================
+// Demo Query Detection
+// ============================================================
+
+/**
+ * Check if a query is a demo query that uses hardcoded data.
+ * Demo queries should be processed one state at a time for smooth animation.
+ */
+function isDemoQuery(query: string): boolean {
+    const ql = query.toLowerCase();
+    const isAdversePossession = ql.includes('adverse possession');
+    const isFraudSol = ql.includes('fraud') && (ql.includes('statute of limitations') || ql.includes('sol') || ql.includes('time limit'));
+    const isTheftThreshold = (ql.includes('theft') || ql.includes('larceny') || ql.includes('stealing')) && (ql.includes('grand') || ql.includes('felony') || ql.includes('threshold'));
+    return isAdversePossession || isFraudSol || isTheftThreshold;
+}
 
 // ============================================================
 // Debug Logger (client-side, checks localStorage)
@@ -115,8 +132,9 @@ async function fetchStatuteFromApi(
     const { dataSource, openaiApiKey: storeOpenAiKey, geminiApiKey, openRouterApiKey, openStatesApiKey, legiscanApiKey, scrapingApiKey } = settings;
 
     // 1. STRICT CLIENT-SIDE MOCK GUARD
-    // If we are in mock mode, DO NOT attempt to hit the API at all.
-    if (dataSource === 'mock') {
+    // If we are in mock mode, DO NOT attempt to hit the API at all...
+    // EXCEPTION: For demo queries, always call the API to get researched data with staggered timing
+    if (dataSource === 'mock' && !isDemoQuery(query)) {
         debug.log(`[${stateCode}] Using client-side mock`);
         return mockFetchStatute(stateCode, query);
     }
@@ -403,9 +421,23 @@ async function processChunk(
     let successes = 0;
     let errors = 0;
 
-    // For LLM-based modes:
-    // If chunk has only 1 state, use individual fetch (enables scraping/proxy).
-    // If chunk has >1 state, use batch API (pure LLM generation, no scraping).
+    // 0. Handle Demo Queries Locally (Client-Side)
+    // To ensure "pop up one by one" animation without network lag/limits
+    if (isDemoQuery(query)) {
+        for (const stateCode of stateCodes) {
+            const demoStatute = getDemoStatute(stateCode, query);
+            if (demoStatute) {
+                surveyStore.setSessionStatute(surveyId, stateCode, demoStatute);
+                successes++;
+            } else {
+                // Should not happen if demo data is complete, but fallback safely
+                surveyStore.setSessionError(surveyId, stateCode, new Error(`No demo data found for ${stateCode}`));
+                errors++;
+            }
+        }
+        return [successes, errors];
+    }
+
     // For LLM-based modes:
     // If chunk has only 1 state, use individual fetch (enables scraping/proxy).
     // If chunk has >1 state, use batch API (pure LLM generation, no scraping).
@@ -488,12 +520,17 @@ export async function searchAllStates(
         throw new MaxConcurrentSurveysError();
     }
 
-    // 2. Process in chunks based on batchSize setting
+    // 2. Determine effective batch size
+    // For demo queries, force batch size 1 so states appear one by one with smooth animation
+    const isDemo = isDemoQuery(userQuery);
+    const effectiveBatchSize = isDemo ? 1 : batchSize;
+
+    // 3. Process in chunks based on effective batch size
     let totalSuccesses = 0;
     let totalErrors = 0;
 
-    // Chunk the 50 states according to user preference (1 to 50)
-    const chunks = chunkArray(ALL_STATE_CODES, batchSize);
+    // Chunk the 50 states according to effective batch size
+    const chunks = chunkArray(ALL_STATE_CODES, effectiveBatchSize);
 
     for (const chunk of chunks) {
         const currentSurvey = useSurveyHistoryStore.getState().surveys.find(s => s.id === surveyId);
@@ -507,8 +544,13 @@ export async function searchAllStates(
         totalErrors += errors;
 
         // Small delay between chunks to prevent overwhelming browser/network if batchSize is small
+        // For demo queries, use a randomized delay (100-500ms) to create natural/staggered "pop one by one" animation
+        // Average 300ms * 50 states = ~15 seconds total duration
         if (chunks.length > 1) {
-            await new Promise(resolve => setTimeout(resolve, INTER_CHUNK_DELAY_MS));
+            const delay = isDemo
+                ? Math.floor(Math.random() * 400) + 100 // 100ms to 500ms
+                : INTER_CHUNK_DELAY_MS;
+            await new Promise(resolve => setTimeout(resolve, delay));
         }
     }
 

@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@variant dark (&:where(.dark, .dark *));
+
 .font-cursive {
   font-family: var(--font-cursive), cursive;
 }

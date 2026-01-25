@@ -4,7 +4,7 @@ import React, { useMemo } from 'react';
 import { useSurveyHistoryStore, useShallow, StatuteEntry } from '@/lib/store';
 import { US_STATES } from '@/lib/constants/states';
 import { StateCode } from '@/types/statute';
-import { BarChart3, TrendingUp, Clock, ShieldCheck, AlertCircle } from 'lucide-react';
+import { BarChart3, TrendingUp, Clock, ShieldCheck, AlertCircle, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // Region groupings
@@ -54,6 +54,7 @@ export default function AnalyticsView() {
     const analytics = useMemo(() => {
         // Count by status
         let successCount = 0;
+        let unverifiedCount = 0;
         let errorCount = 0;
         let pendingCount = 0;
         let totalConfidence = 0;
@@ -65,13 +66,18 @@ export default function AnalyticsView() {
             } else if (entry instanceof Error) {
                 errorCount++;
             } else {
-                successCount++;
+                const isUnverified = (entry.trustLevel === 'suspicious' || entry.trustLevel === 'unverified') || entry.confidenceScore < 70;
+                if (isUnverified) {
+                    unverifiedCount++;
+                } else {
+                    successCount++;
+                }
                 totalConfidence += entry.confidenceScore;
                 confidenceCount++;
             }
         });
 
-        pendingCount = 50 - successCount - errorCount;
+        pendingCount = 50 - successCount - unverifiedCount - errorCount;
 
         // Count by region
         const regionStats = Object.entries(REGIONS).map(([region, codes]) => {
@@ -96,6 +102,7 @@ export default function AnalyticsView() {
 
         return {
             successCount,
+            unverifiedCount,
             errorCount,
             pendingCount,
             avgConfidence,
@@ -116,13 +123,20 @@ export default function AnalyticsView() {
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-4 gap-4 mb-8">
+            <div className="grid grid-cols-5 gap-4 mb-8">
                 <div className="p-4 rounded-lg bg-card border border-border">
                     <div className="flex items-center gap-2 text-muted-foreground mb-2">
                         <ShieldCheck className="w-4 h-4" />
                         <span className="text-xs font-medium uppercase">Verified</span>
                     </div>
                     <div className="text-3xl font-bold text-green-500">{analytics.successCount}</div>
+                </div>
+                <div className="p-4 rounded-lg bg-card border border-border">
+                    <div className="flex items-center gap-2 text-muted-foreground mb-2">
+                        <AlertTriangle className="w-4 h-4" />
+                        <span className="text-xs font-medium uppercase">Unverified</span>
+                    </div>
+                    <div className="text-3xl font-bold text-risk">{analytics.unverifiedCount}</div>
                 </div>
                 <div className="p-4 rounded-lg bg-card border border-border">
                     <div className="flex items-center gap-2 text-muted-foreground mb-2">
@@ -170,6 +184,7 @@ export default function AnalyticsView() {
                     <h3 className="text-sm font-semibold mb-4">Status Distribution</h3>
                     <div className="space-y-3">
                         <Bar label="Verified" value={analytics.successCount} max={50} color="bg-green-500" />
+                        <Bar label="Unverified" value={analytics.unverifiedCount} max={50} color="bg-risk" />
                         <Bar label="Errors" value={analytics.errorCount} max={50} color="bg-error" />
                         <Bar label="Pending" value={analytics.pendingCount} max={50} color="bg-slate-400" />
                     </div>
@@ -193,10 +208,19 @@ export default function AnalyticsView() {
                                     strokeDasharray={`${(analytics.successCount / 50) * 100} 100`}
                                     className="text-green-500"
                                 />
+                                <circle
+                                    cx="18" cy="18" r="16"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeDasharray={`${(analytics.unverifiedCount / 50) * 100} 100`}
+                                    strokeDashoffset={-((analytics.successCount / 50) * 100)}
+                                    className="text-risk"
+                                />
                             </svg>
                             <div className="absolute inset-0 flex items-center justify-center">
                                 <div className="text-center">
-                                    <div className="text-2xl font-bold">{Math.round((analytics.successCount / 50) * 100)}%</div>
+                                    <div className="text-2xl font-bold">{Math.round(((analytics.successCount + analytics.unverifiedCount) / 50) * 100)}%</div>
                                     <div className="text-xs text-muted-foreground">Complete</div>
                                 </div>
                             </div>

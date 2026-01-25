@@ -93,23 +93,41 @@ function checkOfficialSource(url: string): boolean {
     }
 }
 
-function simulateMockVerification(): LLMVerificationResult {
-    const random = Math.random();
-    if (random < 0.05) {
+function simulateMockVerification(textSnippet: string): LLMVerificationResult {
+    const lowerText = textSnippet.toLowerCase();
+
+    // Deterministic checks based on content
+    const isRepealed = lowerText.includes('repealed') || lowerText.includes('superseded');
+    const looksFake = lowerText.includes('error') || lowerText.length < 10;
+    const supportsQuery = !lowerText.includes('irrelevant');
+
+    if (isRepealed) {
         return {
             supports_query: true,
             citation_format_valid: true,
             looks_like_legal_text: true,
             is_potentially_repealed: true,
-            confidence_reasoning: '[MOCK] Text contains repeal indicators - flagged for review.',
+            confidence_reasoning: '[MOCK] Text explicitly contains repeal indicators.',
         };
-    } else if (random < 0.10) {
+    }
+
+    if (looksFake) {
         return {
             supports_query: false,
             citation_format_valid: true,
             looks_like_legal_text: false,
             is_potentially_repealed: false,
-            confidence_reasoning: '[MOCK] Text does not appear to be legal statute content.',
+            confidence_reasoning: '[MOCK] Text is too short or indicates an error.',
+        };
+    }
+
+    if (!supportsQuery) {
+        return {
+            supports_query: false,
+            citation_format_valid: true,
+            looks_like_legal_text: true,
+            is_potentially_repealed: false,
+            confidence_reasoning: '[MOCK] Text flagged as irrelevant for testing purposes.',
         };
     }
 
@@ -121,6 +139,8 @@ function simulateMockVerification(): LLMVerificationResult {
         confidence_reasoning: '[MOCK] Text appears to be legitimate legal content.',
     };
 }
+
+
 
 async function verifyWithLLM(
     textSnippet: string,
@@ -200,7 +220,7 @@ export async function verifyStatuteCitation(
 
     if (mockMode) {
         await new Promise((resolve) => setTimeout(resolve, Math.random() * 200 + 100));
-        llmResult = simulateMockVerification();
+        llmResult = simulateMockVerification(textSnippet);
     } else {
         llmResult = await verifyWithLLM(textSnippet, citation, stateCode, userQuery, keys, providerPreference, modelName);
     }

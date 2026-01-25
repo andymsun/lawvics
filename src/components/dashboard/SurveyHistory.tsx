@@ -109,7 +109,7 @@ export function SurveyHistory() {
                     const riskCount = Object.values(survey.statutes || {}).filter((entry) => {
                         if (!entry || entry instanceof Error) return false;
                         const statute = entry as Statute;
-                        return statute.confidenceScore < 85 ||
+                        return statute.confidenceScore < 70 ||
                             statute.trustLevel === 'suspicious' ||
                             statute.trustLevel === 'unverified';
                     }).length;
@@ -159,12 +159,12 @@ export function SurveyHistory() {
                                                     <span className="text-green-500">
                                                         {Object.values(survey.statutes || {}).filter(s =>
                                                             !(s instanceof Error) &&
-                                                            (s as Statute).confidenceScore >= 85 &&
+                                                            (s as Statute).confidenceScore >= 70 &&
                                                             (s as Statute).trustLevel !== 'suspicious' &&
                                                             (s as Statute).trustLevel !== 'unverified'
                                                         ).length} success
                                                     </span>
-                                                    {riskCount > 0 && <span className="text-risk">{riskCount} risk</span>}
+                                                    {riskCount > 0 && <span className="text-risk">{riskCount} unverified</span>}
                                                     <span className="text-error">{Object.values(survey.statutes || {}).filter(s => s instanceof Error).length} errors</span>
                                                 </>
                                             </>

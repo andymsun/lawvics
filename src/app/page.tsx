@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { InfiniteGridHero } from '@/components/ui/infinite-grid-hero';
 import { ArrowRight, Sparkles } from 'lucide-react';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 export default function Home() {
   return (
@@ -16,11 +17,9 @@ export default function Home() {
         </div>
 
         {/* Title */}
-        <h1 className="text-8xl md:text-9xl font-cursive font-bold tracking-tight mb-8">
-          <span className="bg-clip-text text-transparent bg-gradient-to-r from-[#0f172a] to-slate-800 dark:from-slate-100 dark:via-slate-300 dark:to-slate-100 drop-shadow-md">
-            Lawvics
-          </span>
-        </h1>
+        <div className="mb-8 flex justify-center">
+          <BrandLogo className="h-24 md:h-32 lg:h-40" />
+        </div>
 
         {/* Subtitle */}
         <p className="text-xl md:text-2xl text-[#0f172a]/80 dark:text-slate-300 max-w-2xl mx-auto leading-relaxed">

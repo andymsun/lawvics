@@ -23,6 +23,12 @@ const cursiveFont = Dancing_Script({
 export const metadata: Metadata = {
   title: "Lawvics - 50-State Survey Engine",
   description: "AI-powered legal research across all 50 US jurisdictions",
+  icons: {
+    icon: [
+      { url: '/brand/transparent/Lawvics person-dark.png', media: '(prefers-color-scheme: light)' },
+      { url: '/brand/transparent/Lawvics person-light.png', media: '(prefers-color-scheme: dark)' }
+    ]
+  }
 };
 
 import { Toaster } from "sonner";

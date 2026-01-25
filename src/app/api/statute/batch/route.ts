@@ -5,6 +5,16 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { generateObject } from 'ai';
 import { z } from 'zod';
 import { SYSTEM_CONFIG } from '@/lib/config';
+import { getDemoStatute, normalizeQueryForDemo } from '@/data/demo-statutes';
+
+// All 50 US states in alphabetical order (for staggered demo timing)
+const ALL_STATES: StateCode[] = [
+    'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+    'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+    'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+    'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI',
+    'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
+];
 
 // Force edge runtime for Cloudflare Pages
 export const runtime = 'edge';
@@ -176,6 +186,46 @@ export async function POST(request: NextRequest): Promise<NextResponse<BatchSear
         if (!stateCodes || !Array.isArray(stateCodes) || stateCodes.length === 0 || !query) {
             debug.error('Invalid request body');
             return NextResponse.json({ success: false, error: 'Missing stateCodes array or query' }, { status: 400 });
+        }
+
+        // ============================================================
+        // DEMO MODE: Check if this is a demo query and return hardcoded data
+        // Uses staggered timing to create smooth ~10 second map animation
+        // ============================================================
+        const demoType = normalizeQueryForDemo(query);
+        if (demoType) {
+            debug.log('Using DEMO hardcoded data for batch:', query.substring(0, 50));
+
+            const demoResults: Record<string, Statute> = {};
+
+            // Process all states and collect demo data
+            const statePromises = stateCodes.map(async (stateCode) => {
+                const demoResult = getDemoStatute(stateCode, query);
+                if (demoResult) {
+                    // Calculate staggered delay based on state position
+                    const stateIndex = ALL_STATES.indexOf(stateCode);
+                    const baseDelay = stateIndex >= 0 ? Math.floor((stateIndex / 50) * 9000) : 0;
+                    const jitter = Math.floor(Math.random() * 400);
+                    const totalDelay = baseDelay + jitter + 100;
+
+                    await new Promise(r => setTimeout(r, totalDelay));
+                    return { stateCode, statute: demoResult };
+                }
+                return null;
+            });
+
+            // Wait for all states to complete with staggered timing
+            const results = await Promise.all(statePromises);
+
+            for (const result of results) {
+                if (result) {
+                    demoResults[result.stateCode] = result.statute;
+                }
+            }
+
+            debug.log('Demo results:', { statesReturned: Object.keys(demoResults).length });
+            debug.timeEnd('batch-total');
+            return NextResponse.json({ success: true, data: demoResults });
         }
 
         const activeProvider = request.headers.get('x-active-provider') as AiProvider | null;

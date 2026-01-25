@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { Statute, StateCode } from '@/types/statute';
 import { verifyStatuteV2, VerificationResult, TrustLevel } from '@/lib/agents/auditor';
-import { Shield, AlertTriangle, AlertOctagon, ExternalLink, Clock } from 'lucide-react';
+import { Shield, AlertTriangle, AlertOctagon, ExternalLink, Clock, Search } from 'lucide-react';
 
 interface StatuteCardProps {
     statute: Statute;
@@ -154,16 +154,29 @@ export default function StatuteCard({ statute, onClose }: StatuteCardProps) {
                     </div>
                 </div>
 
-                {/* Source Link */}
-                <a
-                    href={statute.sourceUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors"
-                >
-                    <ExternalLink className="w-4 h-4" />
-                    View Official Source
-                </a>
+                {/* Source Links */}
+                <div className="flex flex-col gap-2">
+                    <a
+                        href={statute.sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors"
+                    >
+                        <ExternalLink className="w-4 h-4" />
+                        View Official Source
+                    </a>
+                    {statute.googleSearchUrl && (
+                        <a
+                            href={statute.googleSearchUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                            <Search className="w-4 h-4" />
+                            Search Google for Citation
+                        </a>
+                    )}
+                </div>
             </div>
         </div>
     );

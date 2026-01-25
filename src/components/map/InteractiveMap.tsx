@@ -33,8 +33,12 @@ function getStateStatus(entry: StatuteEntry | undefined): StateStatus {
 
     if (entry instanceof Error) return 'error';
 
-    // It's a Statute - check confidence for trust level approximation
-    // (Real trust level comes from verification, but we use confidence as proxy)
+    // Check trustLevel first (includes domain verification status)
+    if (entry.trustLevel === 'suspicious' || entry.trustLevel === 'unverified') {
+        return 'suspicious';
+    }
+
+    // Fallback: check confidence for trust level approximation
     if (entry.confidenceScore < 70) return 'suspicious';
 
     return 'success';
@@ -128,27 +132,27 @@ function DetailsPanel({ statute, onClose }: DetailsPanelProps) {
 
 function MapLegend() {
     return (
-        <div className="absolute bottom-6 right-6 flex flex-col items-start gap-3 px-4 py-4 rounded-xl bg-background/20 backdrop-blur-md border border-white/10 shadow-2xl z-30">
+        <div className="absolute bottom-6 right-6 flex flex-col items-start gap-3 px-4 py-4 rounded-xl bg-card/80 backdrop-blur-md border border-border/50 shadow-2xl z-30">
             <h3 className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-1 select-none">Status</h3>
             <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-[#D6D6DA]" />
-                <span className="text-[11px] font-medium text-white/80">Pending</span>
+                <div className="w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600" />
+                <span className="text-[11px] font-medium text-muted-foreground">Pending</span>
             </div>
             <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-[#3B82F6] animate-pulse" />
-                <span className="text-[11px] font-medium text-white/80">Loading</span>
+                <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                <span className="text-[11px] font-medium text-muted-foreground">Loading</span>
             </div>
             <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-[#22C55E]" />
-                <span className="text-[11px] font-medium text-white/80">Verified</span>
+                <div className="w-2 h-2 rounded-full bg-green-500" />
+                <span className="text-[11px] font-medium text-muted-foreground">Verified</span>
             </div>
             <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-[#EAB308]" />
-                <span className="text-[11px] font-medium text-white/80">Risk</span>
+                <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                <span className="text-[11px] font-medium text-muted-foreground">Risk</span>
             </div>
             <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-[#EF4444]" />
-                <span className="text-[11px] font-medium text-white/80">Error</span>
+                <div className="w-2 h-2 rounded-full bg-red-500" />
+                <span className="text-[11px] font-medium text-muted-foreground">Error</span>
             </div>
         </div>
     );

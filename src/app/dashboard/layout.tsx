@@ -12,6 +12,7 @@ import SurveyHistory from '@/components/dashboard/SurveyHistory';
 import StatuteDetailPanel from '@/components/dashboard/StatuteDetailPanel';
 import ReportModal from '@/components/dashboard/ReportModal';
 import { cn } from '@/lib/utils';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 
 export default function DashboardLayout({
     children,
@@ -60,9 +61,7 @@ export default function DashboardLayout({
                     <div className="flex items-center gap-6">
                         {/* Logo */}
                         <Link href="/" className="flex items-center gap-2">
-                            <span className="text-2xl font-cursive font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#0f172a] to-slate-800 dark:from-slate-100 dark:via-slate-300 dark:to-slate-200">
-                                Lawvics
-                            </span>
+                            <BrandLogo height={32} />
                             <span className="text-xs bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-muted-foreground border border-border">v1.0</span>
                         </Link>
 

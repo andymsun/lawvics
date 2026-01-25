@@ -3,15 +3,21 @@
 import React, { useMemo } from 'react';
 import { useSurveyHistoryStore, useShallow, StatuteEntry } from '@/lib/store';
 import { US_STATES } from '@/lib/constants/states';
-import { StateCode } from '@/types/statute';
-import { ShieldCheck, AlertCircle, Clock } from 'lucide-react';
+import { StateCode, Statute } from '@/types/statute';
+import { ShieldCheck, AlertCircle, Clock, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-type Status = 'success' | 'error' | 'pending';
+type Status = 'success' | 'warning' | 'error' | 'pending';
 
 function getStatus(entry: unknown): Status {
     if (!entry) return 'pending';
     if (entry instanceof Error) return 'error';
+
+    // Check for unverified
+    const statute = entry as Statute;
+    const isUnverified = (statute.trustLevel === 'suspicious' || statute.trustLevel === 'unverified') || statute.confidenceScore < 70;
+
+    if (isUnverified) return 'warning';
     return 'success';
 }
 
@@ -19,6 +25,8 @@ function StatusCell({ status }: { status: Status }) {
     switch (status) {
         case 'success':
             return <ShieldCheck className="w-4 h-4 text-green-500" />;
+        case 'warning':
+            return <AlertTriangle className="w-4 h-4 text-risk" />;
         case 'error':
             return <AlertCircle className="w-4 h-4 text-error" />;
         case 'pending':
