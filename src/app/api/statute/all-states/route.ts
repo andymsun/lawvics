@@ -4,6 +4,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { generateObject } from 'ai';
 import { z } from 'zod';
+import { SYSTEM_CONFIG } from '@/lib/config';
 
 // Force edge runtime for Cloudflare Pages
 export const runtime = 'edge';
@@ -220,7 +221,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<AllStates
         // Read from headers, or fall back to environment variables (for system-api mode)
         const openaiApiKey = request.headers.get('x-openai-key') || process.env.OPENAI_API_KEY || undefined;
         const geminiApiKey = request.headers.get('x-gemini-key') || process.env.GOOGLE_GENERATIVE_AI_API_KEY || undefined;
-        const openRouterApiKey = request.headers.get('x-openrouter-key') || process.env.OPENROUTER_API_KEY || undefined;
+        const openRouterApiKey = request.headers.get('x-openrouter-key') || process.env.OPENROUTER_API_KEY || SYSTEM_CONFIG.OPENROUTER_API_KEY || undefined;
 
         debug.log('API Keys:', {
             hasOpenAI: !!openaiApiKey,
