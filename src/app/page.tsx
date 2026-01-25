@@ -10,10 +10,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 const PROMPTS = [
   "Statute of limitations for fraud...",
   "Grand theft felony thresholds...",
-  "Adverse possession time limits...",
-  "LLC annual report deadlines...",
-  "Remote notary requirements...",
-  "Wrongful death claim limits..."
+  "Adverse possession time limits..."
 ];
 
 export default function Home() {
@@ -81,7 +78,7 @@ export default function Home() {
               type="text"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              className="w-full pl-14 pr-16 py-5 text-lg bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl border-2 border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl shadow-slate-200/50 dark:shadow-slate-900/50 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all duration-300 text-slate-900 dark:text-white placeholder:text-slate-400"
+              className="w-full pl-14 pr-16 py-5 text-lg bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl shadow-slate-200/50 dark:shadow-slate-900/50 focus:outline-none focus:border-slate-600 dark:focus:border-white focus:ring-0 transition-all duration-300 text-slate-900 dark:text-white placeholder:text-slate-400"
             />
 
             {/* Custom Fading Placeholder - Must be after input to show on top of background */}

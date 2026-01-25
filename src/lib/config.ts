@@ -8,5 +8,5 @@
  * NOTE2: This key is only here for hardcoded demo and shows
  */
 export const SYSTEM_CONFIG = {
-    OPENROUTER_API_KEY: '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',
+    OPENROUTER_API_KEY: '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',
 };

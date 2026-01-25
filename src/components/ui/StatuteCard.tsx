@@ -7,7 +7,6 @@ import { Shield, AlertTriangle, AlertOctagon, ExternalLink, Clock, Search } from
 
 interface StatuteCardProps {
     statute: Statute;
-    onClose?: () => void;
 }
 
 /**
@@ -48,7 +47,7 @@ function TrustBadge({ trustLevel, message }: { trustLevel: TrustLevel; message: 
 /**
  * Statute Card component showing statute details with verification badge
  */
-export default function StatuteCard({ statute, onClose }: StatuteCardProps) {
+export default function StatuteCard({ statute }: StatuteCardProps) {
     const [verification, setVerification] = useState<VerificationResult | null>(null);
     const [isVerifying, setIsVerifying] = useState(true);
 
@@ -82,20 +81,12 @@ export default function StatuteCard({ statute, onClose }: StatuteCardProps) {
     return (
         <div className="bg-background rounded-xl shadow-lg border border-border overflow-hidden max-w-lg w-full">
             {/* Header */}
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-3">
+            <div className="bg-blue-600 dark:bg-blue-700 text-white px-4 py-3">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <span className="text-lg font-bold">{statute.stateCode}</span>
                         <span className="text-sm opacity-80">Statute Details</span>
                     </div>
-                    {onClose && (
-                        <button
-                            onClick={onClose}
-                            className="text-white/80 hover:text-white transition-colors"
-                        >
-                            ✕
-                        </button>
-                    )}
                 </div>
             </div>
 

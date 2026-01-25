@@ -309,9 +309,10 @@ export default function USMap({ onStateClick }: USMapProps) {
                 onMouseLeave={handleMouseUp}
             >
                 {/* Floating Controls Bar */}
-                <div className="absolute top-4 left-4 right-4 z-30 flex items-center justify-between px-4 py-1.5 rounded-xl bg-card/80 backdrop-blur-md border border-border/50 shadow-lg">
-                    <div className="flex items-center gap-4">
-                        <div className="text-xs font-medium text-muted-foreground tracking-wide select-none">
+                <div className="absolute top-4 left-4 right-4 z-30 flex items-center px-4 py-1.5 rounded-xl bg-card/80 backdrop-blur-md border border-border/50 shadow-lg gap-4">
+                    {/* LEFT: Progress & Cancel */}
+                    <div className="flex-1 flex items-center gap-4 min-w-0">
+                        <div className="text-xs font-medium text-muted-foreground tracking-wide select-none whitespace-nowrap">
                             PROGRESS <span className="text-foreground font-bold ml-1">{analyzedCount}/50 ({percentComplete}%)</span>
                         </div>
                         {activeSession?.status === 'running' && (
@@ -325,16 +326,16 @@ export default function USMap({ onStateClick }: USMapProps) {
                         )}
                     </div>
 
-                    {/* Current Query Display */}
+                    {/* CENTER: Current Query Display */}
                     {activeSession?.query && (
-                        <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 px-3 py-1 bg-background/50 backdrop-blur-md rounded-full border border-border text-xs font-medium text-foreground max-w-sm lg:max-w-md truncate items-baseline gap-2">
-                            <span className="text-muted-foreground uppercase text-[10px] tracking-wider font-bold">Query</span>
-                            <span className="truncate">&ldquo;{activeSession.query}&rdquo;</span>
+                        <div className="hidden md:flex shrink-1 min-w-0 max-w-[40%] px-3 py-1 bg-background/50 backdrop-blur-md rounded-full border border-border text-xs font-medium text-foreground items-baseline gap-2 justify-center">
+                            <span className="text-muted-foreground uppercase text-[10px] tracking-wider font-bold whitespace-nowrap">Query</span>
+                            <span className="truncate min-w-0 block" title={activeSession.query}>&ldquo;{activeSession.query}&rdquo;</span>
                         </div>
                     )}
 
-                    {/* Zoom Controls */}
-                    <div className="flex items-center gap-2">
+                    {/* RIGHT: Zoom Controls */}
+                    <div className="flex-1 flex items-center justify-end gap-2 min-w-0">
                         <button
                             onClick={() => setZoom((z) => Math.min(4, z + 0.25))}
                             className="w-7 h-7 flex items-center justify-center rounded-lg bg-muted text-foreground hover:bg-muted/80 text-base font-medium transition-all backdrop-blur-sm border border-border"

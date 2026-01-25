@@ -979,6 +979,25 @@ export default function SettingsPage() {
                                         )}
                                     </div>
                                 )}
+
+                                {settings.dataSource === 'system-api' && (
+                                    <div className="space-y-4 pt-4 border-t border-border animate-in fade-in slide-in-from-top-4">
+                                        <div className="text-sm text-muted-foreground p-3 bg-muted rounded-lg">
+                                            <span className="font-semibold text-foreground">Note:</span> System API uses the server-configured API key by default. You can override it here if needed.
+                                        </div>
+
+                                        <ApiKeyInput
+                                            label="OpenRouter API Key (Override)"
+                                            value={settings.openRouterApiKey}
+                                            onChange={settings.setOpenRouterApiKey}
+                                            helperText="Leave empty to use the system default."
+                                            placeholder="sk-or-v1-..."
+                                            getKeyUrl="https://openrouter.ai/keys"
+                                            onTest={testOpenRouterKey}
+                                            required={false}
+                                        />
+                                    </div>
+                                )}
                             </motion.div>
                         )}
 

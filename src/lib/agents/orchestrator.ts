@@ -180,6 +180,9 @@ async function fetchStatuteFromApi(
         // We don't need to send keys from client since they are on server
         headers['x-active-provider'] = 'openrouter';
         // Optional: Hint to use OPENROUTER_API_KEY on server if needed
+
+        // Allow client-side override if provided locally
+        if (openRouterApiKey) headers['x-openrouter-key'] = openRouterApiKey;
     }
 
     debug.log(`[${stateCode}] Fetching with headers:`, {

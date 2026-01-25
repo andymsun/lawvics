@@ -125,7 +125,7 @@ export default function ReportModal({ isOpen, onClose }: ReportModalProps) {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40"
+                        className="fixed inset-0 bg-background/80 backdrop-blur-sm z-[55]"
                         onClick={onClose}
                     />
 
@@ -135,7 +135,7 @@ export default function ReportModal({ isOpen, onClose }: ReportModalProps) {
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
                         transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                        className="fixed inset-4 md:inset-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-4xl md:max-h-[85vh] bg-card border border-border rounded-2xl shadow-2xl z-50 overflow-hidden flex flex-col"
+                        className="fixed inset-4 md:inset-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-4xl md:max-h-[85vh] bg-card border border-border rounded-2xl shadow-2xl z-[60] overflow-hidden flex flex-col"
                     >
                         {/* Header */}
                         <div className="flex-shrink-0 p-6 border-b border-border">

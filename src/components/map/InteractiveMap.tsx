@@ -120,7 +120,7 @@ function DetailsPanel({ statute, onClose }: DetailsPanelProps) {
 
             {/* Statute Card */}
             <div className="p-6 pt-16">
-                <StatuteCard statute={statute} onClose={onClose} />
+                <StatuteCard statute={statute} />
             </div>
         </motion.div>
     );

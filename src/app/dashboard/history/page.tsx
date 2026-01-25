@@ -120,10 +120,13 @@ function SurveyRow({ survey }: { survey: SurveyRecord }) {
     const statutes = survey.statutes || {};
     const statesAnalyzed = Object.keys(statutes).length;
 
-    // Check for risk/errors in real-time
-    const hasRisk = Object.values(statutes).some(s =>
-        s instanceof Error || (s.trustLevel === 'suspicious' || s.trustLevel === 'unverified')
-    );
+    // Check for risk types
+    const riskItems = Object.values(statutes).filter(s => s instanceof Error || s.trustLevel === 'suspicious');
+    const unverifiedItems = Object.values(statutes).filter(s => !(s instanceof Error) && s.trustLevel === 'unverified');
+
+    const hasCriticalRisk = riskItems.length > 0;
+    const hasUnverified = unverifiedItems.length > 0;
+
     const statusColor = {
         running: 'text-yellow-500',
         completed: 'text-green-500',
@@ -168,11 +171,18 @@ function SurveyRow({ survey }: { survey: SurveyRecord }) {
 
             {/* Risk Found */}
             <td className="px-4 py-4">
-                {hasRisk ? (
+                {hasCriticalRisk ? (
                     <div className="flex items-center gap-1.5">
                         <XCircle className="w-4 h-4 text-red-500" />
                         <span className="text-sm font-medium text-red-500">
-                            Yes ({survey.errorCount})
+                            Yes ({riskItems.length})
+                        </span>
+                    </div>
+                ) : hasUnverified ? (
+                    <div className="flex items-center gap-1.5">
+                        <Eye className="w-4 h-4 text-yellow-500" />
+                        <span className="text-sm font-medium text-yellow-500">
+                            Unverified ({unverifiedItems.length})
                         </span>
                     </div>
                 ) : (

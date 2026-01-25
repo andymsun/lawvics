@@ -23,6 +23,7 @@ interface DemoStatuteData {
     effectiveDate: string;
     confidenceScore: number;
     sourceUrl: string;
+    trustLevel?: 'verified' | 'unverified' | 'suspicious';
 }
 
 
@@ -32,7 +33,7 @@ interface DemoStatuteData {
 // Sources: Nolo.com, Justia.com, Alta.org, state legislature websites
 // =============================================================================
 
-const ADVERSE_POSSESSION_DATA: Record<StateCode, DemoStatuteData> = {
+const ADVERSE_POSSESSION_DATA: Partial<Record<StateCode, DemoStatuteData>> = {
     AL: {
         citation: 'Ala. Code § 6-5-200',
         textSnippet: 'Alabama requires 10 years of adverse possession with a deed or payment of taxes, or 20 years by prescription without color of title.',
@@ -82,13 +83,7 @@ const ADVERSE_POSSESSION_DATA: Record<StateCode, DemoStatuteData> = {
         confidenceScore: 94,
         sourceUrl: 'https://www.cga.ct.gov/',
     },
-    DE: {
-        citation: 'Del. Code tit. 10, § 7901',
-        textSnippet: 'Delaware requires 20 years of adverse possession.',
-        effectiveDate: '2018-03-23',
-        confidenceScore: 93,
-        sourceUrl: 'https://legis.delaware.gov/',
-    },
+    // DE: Missing for demo error simulation
     FL: {
         citation: 'Fla. Stat. § 95.18',
         textSnippet: 'Florida requires 7 years of adverse possession with color of title and payment of all taxes.',
@@ -103,13 +98,7 @@ const ADVERSE_POSSESSION_DATA: Record<StateCode, DemoStatuteData> = {
         confidenceScore: 94,
         sourceUrl: 'https://www.legis.ga.gov/',
     },
-    HI: {
-        citation: 'Haw. Rev. Stat. § 657-31',
-        textSnippet: 'Hawaii requires 20 years of adverse possession.',
-        effectiveDate: '2022-01-08',
-        confidenceScore: 93,
-        sourceUrl: 'https://www.capitol.hawaii.gov/',
-    },
+    // HI: Missing for demo error simulation
     ID: {
         citation: 'Idaho Code § 5-210',
         textSnippet: 'Idaho requires 20 years of adverse possession with payment of taxes.',
@@ -219,8 +208,8 @@ const ADVERSE_POSSESSION_DATA: Record<StateCode, DemoStatuteData> = {
         citation: 'Neb. Rev. Stat. § 25-202',
         textSnippet: 'Nebraska requires 10 years of adverse possession.',
         effectiveDate: '2019-08-17',
-        confidenceScore: 94,
-        sourceUrl: 'https://nebraskalegislature.gov/',
+        confidenceScore: 80,
+        sourceUrl: 'https://www.nolo.com/legal-encyclopedia/nebraska-adverse-possession-laws.html',
     },
     NV: {
         citation: 'Nev. Rev. Stat. § 11.070',
@@ -240,8 +229,9 @@ const ADVERSE_POSSESSION_DATA: Record<StateCode, DemoStatuteData> = {
         citation: 'N.J. Stat. § 2A:14-30',
         textSnippet: 'New Jersey requires 30 years of adverse possession, or 60 years for woodlands or uncultivated tracts—the longest in the nation.',
         effectiveDate: '2021-01-22',
-        confidenceScore: 95,
+        confidenceScore: 65,
         sourceUrl: 'https://www.njleg.state.nj.us/',
+        trustLevel: 'suspicious',
     },
     NM: {
         citation: 'N.M. Stat. § 37-1-22',
@@ -268,8 +258,8 @@ const ADVERSE_POSSESSION_DATA: Record<StateCode, DemoStatuteData> = {
         citation: 'N.D. Cent. Code § 28-01-04',
         textSnippet: 'North Dakota requires 20 years of adverse possession, or 10 years with a deed and payment of taxes.',
         effectiveDate: '2024-05-06',
-        confidenceScore: 93,
-        sourceUrl: 'https://www.ndlegis.gov/',
+        confidenceScore: 80,
+        sourceUrl: 'https://www.nolo.com/legal-encyclopedia/north-dakota-adverse-possession-laws.html',
     },
     OH: {
         citation: 'Ohio Rev. Code § 2305.04',
@@ -317,8 +307,9 @@ const ADVERSE_POSSESSION_DATA: Record<StateCode, DemoStatuteData> = {
         citation: 'S.D. Codified Laws § 15-3-1',
         textSnippet: 'South Dakota requires 20 years of adverse possession, or 10 years with payment of taxes and a deed.',
         effectiveDate: '2024-09-13',
-        confidenceScore: 93,
+        confidenceScore: 60,
         sourceUrl: 'https://sdlegislature.gov/',
+        trustLevel: 'suspicious',
     },
     TN: {
         citation: 'Tenn. Code § 28-2-101',
@@ -390,7 +381,7 @@ const ADVERSE_POSSESSION_DATA: Record<StateCode, DemoStatuteData> = {
 // Sources: Justia.com, Nolo.com, state legislature websites
 // =============================================================================
 
-const FRAUD_SOL_DATA: Record<StateCode, DemoStatuteData> = {
+const FRAUD_SOL_DATA: Partial<Record<StateCode, DemoStatuteData>> = {
     AL: {
         citation: 'Ala. Code § 6-2-3',
         textSnippet: 'The statute of limitations for civil fraud in Alabama is 2 years from discovery of the fraud.',
@@ -398,13 +389,7 @@ const FRAUD_SOL_DATA: Record<StateCode, DemoStatuteData> = {
         confidenceScore: 95,
         sourceUrl: 'https://alison.legislature.state.al.us/',
     },
-    AK: {
-        citation: 'Alaska Stat. § 09.10.053',
-        textSnippet: 'Alaska statute of limitations for fraud is 2 years from discovery, with a maximum of 10 years from occurrence.',
-        effectiveDate: '2022-05-30',
-        confidenceScore: 94,
-        sourceUrl: 'https://www.akleg.gov/',
-    },
+    // AK: Missing for demo error simulation
     AZ: {
         citation: 'Ariz. Rev. Stat. § 12-543',
         textSnippet: 'Arizona statute of limitations for fraud is 3 years from discovery.',
@@ -451,8 +436,9 @@ const FRAUD_SOL_DATA: Record<StateCode, DemoStatuteData> = {
         citation: 'Fla. Stat. § 95.031',
         textSnippet: 'Florida statute of limitations for fraud is 4 years from discovery, with a maximum of 12 years from the date of the fraud.',
         effectiveDate: '2024-12-15',
-        confidenceScore: 95,
+        confidenceScore: 68,
         sourceUrl: 'http://www.leg.state.fl.us/',
+        trustLevel: 'suspicious',
     },
     GA: {
         citation: 'Ga. Code § 9-3-31',
@@ -521,8 +507,8 @@ const FRAUD_SOL_DATA: Record<StateCode, DemoStatuteData> = {
         citation: 'Me. Rev. Stat. tit. 14, § 859',
         textSnippet: 'Maine statute of limitations for fraud is 6 years from discovery.',
         effectiveDate: '2022-11-28',
-        confidenceScore: 93,
-        sourceUrl: 'https://legislature.maine.gov/',
+        confidenceScore: 75,
+        sourceUrl: 'https://www.justia.com/marketing/directory/maine/fraud/',
     },
     MD: {
         citation: 'Md. Code, Cts. & Jud. Proc. § 5-101',
@@ -535,8 +521,8 @@ const FRAUD_SOL_DATA: Record<StateCode, DemoStatuteData> = {
         citation: 'Mass. Gen. Laws ch. 260, § 2A',
         textSnippet: 'Massachusetts statute of limitations for fraud is 3 years from discovery.',
         effectiveDate: '2021-10-08',
-        confidenceScore: 94,
-        sourceUrl: 'https://malegislature.gov/',
+        confidenceScore: 78,
+        sourceUrl: 'https://www.justia.com/marketing/directory/massachusetts/fraud/',
     },
     MI: {
         citation: 'Mich. Comp. Laws § 600.5813',
@@ -584,15 +570,16 @@ const FRAUD_SOL_DATA: Record<StateCode, DemoStatuteData> = {
         citation: 'Nev. Rev. Stat. § 11.190',
         textSnippet: 'Nevada statute of limitations for fraud is 3 years from discovery.',
         effectiveDate: '2018-01-07',
-        confidenceScore: 94,
+        confidenceScore: 62,
         sourceUrl: 'https://www.leg.state.nv.us/',
+        trustLevel: 'suspicious',
     },
     NH: {
         citation: 'N.H. Rev. Stat. § 508:4',
         textSnippet: 'New Hampshire statute of limitations for fraud is 3 years from discovery.',
         effectiveDate: '2024-08-20',
-        confidenceScore: 93,
-        sourceUrl: 'http://www.gencourt.state.nh.us/',
+        confidenceScore: 75,
+        sourceUrl: 'https://www.justia.com/marketing/directory/new-hampshire/fraud/',
     },
     NJ: {
         citation: 'N.J. Stat. § 2A:14-1.2',
@@ -661,8 +648,8 @@ const FRAUD_SOL_DATA: Record<StateCode, DemoStatuteData> = {
         citation: 'R.I. Gen. Laws § 9-1-14',
         textSnippet: 'Rhode Island statute of limitations for fraud is 3 years from discovery.',
         effectiveDate: '2018-10-04',
-        confidenceScore: 94,
-        sourceUrl: 'http://www.rilegislature.gov/',
+        confidenceScore: 77,
+        sourceUrl: 'https://www.justia.com/marketing/directory/rhode-island/fraud/',
     },
     SC: {
         citation: 'S.C. Code § 15-3-530',
@@ -699,13 +686,7 @@ const FRAUD_SOL_DATA: Record<StateCode, DemoStatuteData> = {
         confidenceScore: 94,
         sourceUrl: 'https://le.utah.gov/',
     },
-    VT: {
-        citation: 'Vt. Stat. tit. 12, § 511',
-        textSnippet: 'Vermont statute of limitations for fraud is 6 years from discovery.',
-        effectiveDate: '2019-10-07',
-        confidenceScore: 94,
-        sourceUrl: 'https://legislature.vermont.gov/',
-    },
+    // VT: Missing for demo error simulation
     VA: {
         citation: 'Va. Code § 8.01-243',
         textSnippet: 'Virginia statute of limitations for fraud is 2 years from discovery.',
@@ -748,7 +729,7 @@ const FRAUD_SOL_DATA: Record<StateCode, DemoStatuteData> = {
 // Sources: WorldPopulationReview.com, Pew Research, state legislature websites
 // =============================================================================
 
-const GTA_THRESHOLD_DATA: Record<StateCode, DemoStatuteData> = {
+const GTA_THRESHOLD_DATA: Partial<Record<StateCode, DemoStatuteData>> = {
     AL: {
         citation: 'Ala. Code § 13A-8-3',
         textSnippet: 'Alabama felony theft threshold is $1,500. Theft of property valued at $1,500 or more is theft of property in the first degree (Class B felony).',
@@ -785,7 +766,7 @@ const GTA_THRESHOLD_DATA: Record<StateCode, DemoStatuteData> = {
         sourceUrl: 'https://leginfo.legislature.ca.gov/',
     },
     CO: {
-        citation: 'Colo. Rev. Stat. § 18-4-401',
+        citation: 'Colo. Rev. Stat. § 13-80-101',
         textSnippet: 'Colorado felony theft threshold is $2,000. Theft is a Class 4 felony when property value is $2,000 or more but less than $5,000.',
         effectiveDate: '2018-12-12',
         confidenceScore: 95,
@@ -870,10 +851,11 @@ const GTA_THRESHOLD_DATA: Record<StateCode, DemoStatuteData> = {
     },
     LA: {
         citation: 'La. Rev. Stat. § 14:67',
-        textSnippet: 'Louisiana felony theft threshold is $1,000. Theft of property valued at $1,000 or more is a felony with imprisonment up to 10 years.',
+        textSnippet: '(Potential Conflict) Louisiana felony theft threshold appears to be $1,000, but recent amendments may apply.',
         effectiveDate: '2021-12-21',
-        confidenceScore: 95,
+        confidenceScore: 60,
         sourceUrl: 'https://legis.la.gov/',
+        trustLevel: 'suspicious',
     },
     ME: {
         citation: 'Me. Rev. Stat. tit. 17-A, § 353',
@@ -912,10 +894,11 @@ const GTA_THRESHOLD_DATA: Record<StateCode, DemoStatuteData> = {
     },
     MS: {
         citation: 'Miss. Code § 97-17-41',
-        textSnippet: 'Mississippi grand larceny threshold is $1,000. Grand larceny applies when property value exceeds $1,000.',
+        textSnippet: 'Mississippi grand larceny threshold is $1,000. NOTE: Conflicting reports on whether threshold was raised to $2,000.',
         effectiveDate: '2022-05-12',
-        confidenceScore: 94,
+        confidenceScore: 55,
         sourceUrl: 'http://www.legislature.ms.gov/',
+        trustLevel: 'suspicious',
     },
     MO: {
         citation: 'Mo. Rev. Stat. § 570.030',
@@ -928,8 +911,8 @@ const GTA_THRESHOLD_DATA: Record<StateCode, DemoStatuteData> = {
         citation: 'Mont. Code § 45-6-301',
         textSnippet: 'Montana felony theft threshold is $1,500. Theft of property valued at $1,500 or more is a felony.',
         effectiveDate: '2022-05-08',
-        confidenceScore: 95,
-        sourceUrl: 'https://leg.mt.gov/',
+        confidenceScore: 72,
+        sourceUrl: 'https://www.criminaldefenselawyer.com/resources/theft-and-larceny-laws-montana.htm',
     },
     NE: {
         citation: 'Neb. Rev. Stat. § 28-518',
@@ -995,7 +978,7 @@ const GTA_THRESHOLD_DATA: Record<StateCode, DemoStatuteData> = {
         sourceUrl: 'https://www.legislature.ohio.gov/',
     },
     OK: {
-        citation: 'Okla. Stat. tit. 21, § 1704',
+        citation: 'Okla. Stat. tit. 12, § 95',
         textSnippet: 'Oklahoma grand larceny threshold is $1,000. Grand larceny applies when property value exceeds $1,000.',
         effectiveDate: '2020-05-10',
         confidenceScore: 94,
@@ -1015,13 +998,7 @@ const GTA_THRESHOLD_DATA: Record<StateCode, DemoStatuteData> = {
         confidenceScore: 94,
         sourceUrl: 'https://www.legis.state.pa.us/',
     },
-    RI: {
-        citation: 'R.I. Gen. Laws § 11-41-5',
-        textSnippet: 'Rhode Island felony larceny threshold is $1,500. Larceny of property valued at $1,500 or more is a felony.',
-        effectiveDate: '2022-11-28',
-        confidenceScore: 94,
-        sourceUrl: 'http://www.rilegislature.gov/',
-    },
+    // RI: Missing for demo error simulation
     SC: {
         citation: 'S.C. Code § 16-13-30',
         textSnippet: 'South Carolina grand larceny threshold is $2,000. Grand larceny applies when property value exceeds $2,000.',
@@ -1092,20 +1069,14 @@ const GTA_THRESHOLD_DATA: Record<StateCode, DemoStatuteData> = {
         confidenceScore: 94,
         sourceUrl: 'https://legis.wisconsin.gov/',
     },
-    WY: {
-        citation: 'Wyo. Stat. § 6-3-402',
-        textSnippet: 'Wyoming felony theft threshold is $1,000. Theft is a felony when property value is $1,000 or more.',
-        effectiveDate: '2022-12-16',
-        confidenceScore: 94,
-        sourceUrl: 'https://www.wyoleg.gov/',
-    },
+    // WY: Missing for demo error simulation
 };
 
 // =============================================================================
 // Combined Demo Data Export
 // =============================================================================
 
-const DEMO_DATA: Record<DemoQuery, Record<StateCode, DemoStatuteData>> = {
+const DEMO_DATA: Record<DemoQuery, Partial<Record<StateCode, DemoStatuteData>>> = {
     adverse_possession: ADVERSE_POSSESSION_DATA,
     fraud_sol: FRAUD_SOL_DATA,
     gta_threshold: GTA_THRESHOLD_DATA,
@@ -1206,7 +1177,7 @@ export function getDemoStatute(stateCode: StateCode, query: string): Statute | n
         confidenceScore: stateData.confidenceScore,
         sourceUrl: stateData.sourceUrl,
         googleSearchUrl,
-        trustLevel: verified ? 'verified' : 'unverified',
+        trustLevel: stateData.trustLevel || (verified ? 'verified' : 'unverified'),
     };
 }
 

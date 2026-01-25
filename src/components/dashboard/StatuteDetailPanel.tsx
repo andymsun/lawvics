@@ -88,6 +88,13 @@ export default function StatuteDetailPanel() {
                         Source: AI Verification
                     </div>
                 );
+            case 'system-api':
+                return (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs font-medium border border-indigo-200 dark:border-indigo-800">
+                        <Zap className="w-3.5 h-3.5" />
+                        Source: Lawvics Proprietary Systems
+                    </div>
+                );
             default: // mock
                 return (
                     <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 text-xs font-medium border border-green-200 dark:border-green-800">
@@ -112,7 +119,7 @@ export default function StatuteDetailPanel() {
                         }}
                         exit={{ x: '100%', opacity: 0 }}
                         transition={{ type: 'spring', stiffness: 400, damping: 40 }}
-                        className="absolute right-4 top-4 bottom-4 w-96 bg-card/95 backdrop-blur-md border border-border rounded-xl shadow-2xl z-40 flex flex-col pointer-events-auto overflow-visible"
+                        className="absolute right-4 top-4 bottom-4 w-96 bg-card/95 backdrop-blur-md border border-border rounded-xl shadow-2xl z-50 flex flex-col pointer-events-auto overflow-visible"
                     >
                         {/* Semicircle Toggle Button */}
                         <button
@@ -197,7 +204,7 @@ export default function StatuteDetailPanel() {
                                 ) : statute ? (
 
                                     <>
-                                        <StatuteCard statute={statute} onClose={handleClose} />
+                                        <StatuteCard statute={statute} />
 
                                         {/* Raw Data View for Official API */}
                                         {settings.dataSource === 'official-api' && (

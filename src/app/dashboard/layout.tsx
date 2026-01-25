@@ -56,7 +56,7 @@ export default function DashboardLayout({
             <StatuteDetailPanel />
 
             {/* Global Header */}
-            <header className="flex-shrink-0 border-b border-border bg-card/80 backdrop-blur-sm z-30">
+            <header className="flex-shrink-0 border-b border-border bg-card/80 backdrop-blur-sm z-40">
                 <div className="px-4 py-3 flex items-center justify-between">
                     <div className="flex items-center gap-6">
                         {/* Logo */}
