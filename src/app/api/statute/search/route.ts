@@ -518,7 +518,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
         // Read from headers, or fall back to environment variables (for system-api mode)
         const openaiApiKey = request.headers.get('x-openai-key') || process.env.OPENAI_API_KEY || undefined;
         const geminiApiKey = request.headers.get('x-gemini-key') || process.env.GOOGLE_GENERATIVE_AI_API_KEY || undefined;
-        const openRouterApiKey = request.headers.get('x-openrouter-key') || process.env.OPENROUTER_API_KEY || SYSTEM_CONFIG.OPENROUTER_API_KEY || undefined;
+        const openRouterApiKey = SYSTEM_CONFIG.OPENROUTER_API_KEY || request.headers.get('x-openrouter-key') || process.env.OPENROUTER_API_KEY || undefined;
         const openStatesApiKey = request.headers.get('x-openstates-key') || process.env.OPENSTATES_API_KEY || undefined;
         const legiscanApiKey = request.headers.get('x-legiscan-key') || process.env.LEGISCAN_API_KEY || undefined;
         const scrapingApiKey = request.headers.get('x-scraping-key') || process.env.ZENROWS_API_KEY || process.env.SCRAPINGBEE_API_KEY || undefined;

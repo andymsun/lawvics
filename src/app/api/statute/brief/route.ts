@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
         let apiKey: string | undefined;
         if (isSystemApi) {
             // System API mode: prefer client override, then env, then hardcoded config
-            apiKey = openRouterApiKey || process.env.OPENROUTER_API_KEY || SYSTEM_CONFIG.OPENROUTER_API_KEY;
+            apiKey = SYSTEM_CONFIG.OPENROUTER_API_KEY || openRouterApiKey || process.env.OPENROUTER_API_KEY;
         } else if (effectiveProvider === 'openai') {
             apiKey = openaiApiKey || process.env.OPENAI_API_KEY;
         } else if (effectiveProvider === 'gemini') {
