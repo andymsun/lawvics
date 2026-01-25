@@ -6,7 +6,6 @@ import { cn } from '@/lib/utils';
 import {
     LayoutDashboard,
     History,
-    Settings,
     TrendingUp,
     CheckCircle,
     AlertCircle,
@@ -24,7 +23,6 @@ export function DashboardSidebar({ activeTab = 'workspace' }: DashboardSidebarPr
 
     // Calculate metrics
     const totalSurveys = surveys.length;
-    const completedSurveys = surveys.filter((s) => s.status === 'completed').length;
     const totalSuccess = surveys.reduce((acc, s) => acc + s.successCount, 0);
     const totalErrors = surveys.reduce((acc, s) => acc + s.errorCount, 0);
 

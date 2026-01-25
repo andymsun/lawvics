@@ -9,9 +9,9 @@ import {
     ChevronDown,
     ChevronRight,
     ExternalLink,
-    Trash2,
 } from 'lucide-react';
 import { ExportButton } from '../ExportButton';
+import { DoubleConfirmDelete } from '@/components/ui/DoubleConfirmDelete';
 
 const STATE_NAMES: Record<StateCode, string> = {
     AL: 'Alabama', AK: 'Alaska', AZ: 'Arizona', AR: 'Arkansas', CA: 'California',
@@ -182,13 +182,11 @@ export function SavedView() {
                                                             )}
                                                         </div>
                                                     </div>
-                                                    <button
-                                                        onClick={() => handleRemove(statute.citation)}
-                                                        className="p-2 text-muted-foreground hover:text-red-500 transition-colors"
+                                                    <DoubleConfirmDelete
+                                                        onConfirm={() => handleRemove(statute.citation)}
+                                                        className="text-muted-foreground hover:text-red-500 hover:bg-red-500/10 p-2 rounded-md transition-colors"
                                                         title="Remove from saved"
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </button>
+                                                    />
                                                 </div>
                                             </div>
                                         ))}

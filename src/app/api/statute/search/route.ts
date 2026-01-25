@@ -4,15 +4,9 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { generateObject } from 'ai';
 import { z } from 'zod';
-import * as cheerio from 'cheerio';
-import { PlaywrightCrawler } from 'crawlee';
-// import * as cheerio from 'cheerio'; // Removed for Edge compatibility
-// ...
-// const html = await res.text();
-// const $ = cheerio.load(html);
-// $('script, style, nav, footer').remove();
-// const cleanText = $('body').text().replace(/\s+/g, ' ').substring(0, 15000);
-const cleanText = "Debug: Cheerio disabled"; // Placeholder
+// import * as cheerio from 'cheerio'; // Removed for now to fix unused warning. If needed later, uncomment and use correctly with Edge compat.
+// import { PlaywrightCrawler } from 'crawlee'; // Removed for Edge compatibility
+
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Force edge runtime for Cloudflare Pages
@@ -261,23 +255,14 @@ const ScraperSchema = z.object({
 /**
  * Use Crawlee + Playwright to fetch page content (handles JS rendering)
  */
-async function fetchPageContent(url: string): Promise<string> {
-    let content = '';
+/**
+ * Fetch page content (Edge compatible)
+ */
+// async function fetchPageContent(url: string): Promise<string> {
+//     // Playwright won't work on Edge. Using fetch instead.
+//     return ""; 
+// }
 
-    const crawler = new PlaywrightCrawler({
-        // Headless is default
-        // Use a unique persistence key or in-memory to avoid conflicts
-        requestHandler: async ({ page }) => {
-            // Wait for body to be visible
-            await page.waitForSelector('body');
-            content = await page.content();
-        },
-        maxRequestsPerCrawl: 1,
-    });
-
-    await crawler.run([url]);
-    return content;
-}
 
 async function scrapeStateStatute(
     stateCode: StateCode,
@@ -290,29 +275,7 @@ async function scrapeStateStatute(
     const baseUrl = STATE_LEGISLATURE_URLS[stateCode];
     if (!baseUrl) throw new Error(`No URL for ${stateCode}`);
 
-    try {
-        // 1. Fetch the page content using Crawlee (replaces simple fetch)
-        console.log(`[Crawlee] Visiting ${baseUrl} for ${stateCode}...`);
-        const html = await fetchPageContent(baseUrl);
 
-        const $ = cheerio.load(html);
-
-        // 2. Clean text (remove scripts, styles, etc.)
-        $('script, style, nav, footer, iframe, noscript').remove();
-        const cleanText = $('body').text().replace(/\s+/g, ' ').substring(0, 15000);
-
-        // 3. LLM Extraction
-        const model = getModel(keys, activeProvider, aiModel);
-        const { object } = await generateObject({
-            model,
-            schema: ScraperSchema,
-            prompt: `Extract statute information for the query "${query}" from the following text from ${stateCode}'s legislature website:
-            
-            TEXT:
-            "${cleanText}"
-            
-            If no specific statute is found, return the best match or state "None found" in citation.`,
-        });
     // Proxy Logic (ZenRows / ScrapingBee compatible)
     let targetUrl = baseUrl;
     let headers: Record<string, string> = {
@@ -477,7 +440,6 @@ async function fetchLegiScan(stateCode: StateCode, query: string, apiKey: string
     }
 
     // Default to first result
-    const result = data.searchresult?.[0]; // LegiScan returns array in 'searchresult' (check specific shape)
     // Note: LegiScan structure is { status: "OK", searchresult: { "0": {...}, "1": {...}, summary: {...} } }
     // We need to handle this quirky array-like object.
 

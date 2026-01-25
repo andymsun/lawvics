@@ -2,20 +2,23 @@
 
 import * as React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileText, File as FileIcon, X, Check, ArrowUpFromLine, Download } from 'lucide-react';
+import { FileText, File as FileIcon, X, Check, ArrowUpFromLine, Download, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useSettingsStore } from '@/lib/store';
 import { jsPDF } from 'jspdf';
 import { Document, Packer, Paragraph, TextRun } from 'docx';
 import { saveAs } from 'file-saver';
 
+import { ExportItem } from './ExportButton';
+
 interface ExportModalProps {
     isOpen: boolean;
     onClose: () => void;
-    data: any[]; // The data to export
+    data: ExportItem[]; // The data to export
     type: 'history' | 'saved';
 }
 
-export function ExportModal({ isOpen, onClose, data, type }: ExportModalProps) {
+export function ExportModal({ isOpen, onClose, data }: ExportModalProps) {
     const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
     const [includeSummary, setIncludeSummary] = React.useState(true);
     const [isGenerating, setIsGenerating] = React.useState(false);
@@ -36,18 +39,80 @@ export function ExportModal({ isOpen, onClose, data, type }: ExportModalProps) {
         );
     };
 
+    // Helper function to extract export content from an item
+    // Handles both direct statutes and nested SurveyRecord statutes
+    const getExportContent = (item: ExportItem): string => {
+        // Direct content
+        if (item.statute_text) return item.statute_text;
+        if (item.textSnippet) return item.textSnippet;
+
+        // Nested statutes from SurveyRecord
+        if (item.statutes) {
+            const snippets: string[] = [];
+            Object.entries(item.statutes).forEach(([stateCode, entry]) => {
+                if (entry && !(entry instanceof Error)) {
+                    const text = entry.textSnippet || entry.citation || '';
+                    if (text) {
+                        snippets.push(`[${stateCode}] ${text}`);
+                    }
+                }
+            });
+            if (snippets.length > 0) {
+                return snippets.join('\n\n');
+            }
+        }
+
+        return 'No content available';
+    };
+
+    const generateSummary = async (items: ExportItem[]): Promise<string> => {
+        try {
+            const settings = useSettingsStore.getState();
+            const statutesText = items.map(item => getExportContent(item)).filter(t => t.length > 0);
+
+            const response = await fetch('/api/statute/summary', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    statutes: statutesText,
+                    provider: settings.activeAiProvider,
+                    model: settings.activeAiProvider === 'openai' ? settings.openaiModel :
+                        settings.activeAiProvider === 'gemini' ? settings.geminiModel :
+                            settings.openRouterModel,
+                    openaiApiKey: settings.openaiApiKey,
+                    geminiApiKey: settings.geminiApiKey,
+                    openRouterApiKey: settings.openRouterApiKey,
+                }),
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                return `AI OVERVIEW SUMMARY\n\n${data.summary}\n\n---\n\n`;
+            } else {
+                console.error("Summary generation failed:", data.error);
+                return `AI OVERVIEW SUMMARY\n\n(Summary generation failed: ${data.error})\n\n---\n\n`;
+            }
+        } catch (error) {
+            console.error("Summary generation error:", error);
+            return `AI OVERVIEW SUMMARY\n\n(Summary generation failed)\n\n---\n\n`;
+        }
+    };
+
     const handleExport = async (format: 'pdf' | 'docx' | 'gdoc') => {
         if (selectedIds.length === 0) return;
         setIsGenerating(true);
 
-        const selectedItems = data.filter(item => selectedIds.includes(item.id || item.citation));
+        const selectedItems = data.filter(item => {
+            const itemId = String(item.id ?? item.citation ?? '');
+            return selectedIds.includes(itemId);
+        });
         const timestamp = new Date().toLocaleDateString().replace(/\//g, '-');
         const filename = `lawvics_export_${timestamp}`;
 
-        // Mock AI Summary Text (In a real app, this would be fetched from an API)
-        const summaryText = includeSummary
-            ? `AI OVERVIEW SUMMARY\n\nGenerated for ${selectedIds.length} items. This overview synthesizes the key legal principles found in the selected statutes. Each statute provides specific regulations concerning their respective jurisdictions, effectively establishing a framework for legal compliance and enforcement.\n\n---\n\n`
-            : "";
+        let summaryText = "";
+        if (includeSummary) {
+            summaryText = await generateSummary(selectedItems);
+        }
 
         try {
             if (format === 'pdf') {
@@ -71,13 +136,18 @@ export function ExportModal({ isOpen, onClose, data, type }: ExportModalProps) {
                 }
 
                 doc.setFontSize(12);
+                const pageHeight = 280; // Safe content height
+                const lineHeight = 7;
+
                 selectedItems.forEach((item, index) => {
-                    if (y > 270) {
+                    // Check if we need a new page before adding title
+                    if (y > pageHeight - 20) {
                         doc.addPage();
                         y = 20;
                     }
+
                     const title = item.query || item.citation || `Item ${index + 1}`;
-                    const content = item.statute_text || item.textSnippet || 'No content';
+                    const content = getExportContent(item);
 
                     doc.setFont('helvetica', 'bold');
                     doc.text(title, 20, y);
@@ -85,8 +155,18 @@ export function ExportModal({ isOpen, onClose, data, type }: ExportModalProps) {
 
                     doc.setFont('helvetica', 'normal');
                     const splitText = doc.splitTextToSize(content, 170);
-                    doc.text(splitText, 20, y);
-                    y += (splitText.length * 7) + 10;
+
+                    // Write each line individually, checking for page overflow
+                    splitText.forEach((line: string) => {
+                        if (y > pageHeight) {
+                            doc.addPage();
+                            y = 20;
+                        }
+                        doc.text(line, 20, y);
+                        y += lineHeight;
+                    });
+
+                    y += 10; // Space between items
                 });
 
                 doc.save(`${filename}.pdf`);
@@ -140,7 +220,7 @@ export function ExportModal({ isOpen, onClose, data, type }: ExportModalProps) {
                     new Paragraph({
                         children: [
                             new TextRun({
-                                text: item.statute_text || item.textSnippet || "No content",
+                                text: getExportContent(item),
                             }),
                         ],
                     }),
@@ -161,7 +241,7 @@ export function ExportModal({ isOpen, onClose, data, type }: ExportModalProps) {
                     textParts.push(summaryText);
                 }
                 textParts.push(...selectedItems.map(item =>
-                    `${item.query || item.citation}\n\n${item.statute_text || item.textSnippet}`
+                    `${item.query || item.citation}\n\n${getExportContent(item)}`
                 ));
 
                 const text = textParts.join('\n\n---\n\n');
@@ -233,7 +313,8 @@ export function ExportModal({ isOpen, onClose, data, type }: ExportModalProps) {
                                                 "text-sm font-semibold mb-2 flex items-center gap-2",
                                                 includeSummary ? "text-blue-700 dark:text-blue-400" : "text-muted-foreground"
                                             )}>
-                                                {includeSummary && <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />}
+                                                {includeSummary && !isGenerating && <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />}
+                                                {isGenerating ? <Loader2 className="w-4 h-4 animate-spin text-blue-500" /> : null}
                                                 AI Summary Overview
                                             </h3>
                                             <p className="text-sm text-muted-foreground leading-relaxed">
@@ -261,7 +342,7 @@ export function ExportModal({ isOpen, onClose, data, type }: ExportModalProps) {
                                     </h3>
                                     <div className="space-y-1">
                                         {data.map((item) => {
-                                            const id = item.id || item.citation;
+                                            const id = String(item.id ?? item.citation ?? '');
                                             const isSelected = selectedIds.includes(id);
                                             return (
                                                 <div

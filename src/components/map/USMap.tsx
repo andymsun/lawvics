@@ -65,28 +65,40 @@ function useMapColors() {
 // Legend Component
 // ============================================================
 
-function MapLegend({ colors }: { colors: ReturnType<typeof useMapColors> }) {
+interface MapLegendProps {
+    colors: ReturnType<typeof useMapColors>;
+    counts: {
+        pending: number;
+        loading: number;
+        verified: number;
+        risk: number;
+        error: number;
+    };
+}
+
+function MapLegend({ colors, counts }: MapLegendProps) {
     return (
-        <div className="flex items-center gap-4 text-xs text-muted-foreground bg-card/50 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-border/50 shadow-sm">
-            <div className="flex items-center gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-sm" style={{ background: colors.idle }} />
-                <span>Pending</span>
+        <div className="absolute bottom-4 right-4 flex flex-col items-start gap-2.5 px-3 py-3 rounded-xl bg-background/30 backdrop-blur-md border border-white/10 shadow-2xl z-30">
+            <h3 className="text-[9px] uppercase tracking-widest font-bold text-muted-foreground mb-0.5 select-none">Status</h3>
+            <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full" style={{ background: colors.idle }} />
+                <span className="text-[10px] font-medium text-white/80">Pending ({counts.pending})</span>
             </div>
-            <div className="flex items-center gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-sm animate-pulse" style={{ background: colors.loading }} />
-                <span>Loading</span>
+            <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: colors.loading }} />
+                <span className="text-[10px] font-medium text-white/80">Loading ({counts.loading})</span>
             </div>
-            <div className="flex items-center gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-sm" style={{ background: colors.success }} />
-                <span>Verified</span>
+            <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full" style={{ background: colors.success }} />
+                <span className="text-[10px] font-medium text-white/80">Verified ({counts.verified})</span>
             </div>
-            <div className="flex items-center gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-sm" style={{ background: colors.suspicious }} />
-                <span>Risk</span>
+            <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full" style={{ background: colors.suspicious }} />
+                <span className="text-[10px] font-medium text-white/80">Risk ({counts.risk})</span>
             </div>
-            <div className="flex items-center gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-sm" style={{ background: colors.error }} />
-                <span>Error</span>
+            <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full" style={{ background: colors.error }} />
+                <span className="text-[10px] font-medium text-white/80">Error ({counts.error})</span>
             </div>
         </div>
     );
@@ -96,21 +108,72 @@ export default function USMap({ onStateClick }: USMapProps) {
     // Use atomic primitive selector for activeSessionId (stable)
     const activeSurveyId = useSurveyHistoryStore((state) => state.activeSurveyId);
 
-    // Use useShallow for object selection to prevent infinite re-renders
-    const activeSession = useSurveyHistoryStore(
-        useShallow((state) => state.surveys.find((s) => s.id === state.activeSurveyId))
+    // Use direct selector for active session to ensure updates trigger re-renders
+    // When statutes map updates, the session object reference changes, triggering a re-render
+    const activeSession = useSurveyHistoryStore((state) =>
+        state.surveys.find((s) => s.id === state.activeSurveyId)
     );
 
-    // Memoize the statutes to avoid recalculating on every render
+    // Derived state directly from activeSession (no useMemo needed if we trust the re-render)
+    // or keep useMemo for expensive calculations
     const statutes = useMemo<Partial<Record<StateCode, StatuteEntry>>>(() =>
         activeSession?.statutes ?? {},
-        [activeSession?.statutes]
+        [activeSession]
     );
 
-    const percentComplete = useMemo(() =>
-        Math.round((Object.keys(statutes).length / 50) * 100),
-        [statutes]
-    );
+    // Calculate counts for legend
+    const counts = useMemo(() => {
+        const counts = {
+            pending: 0,
+            loading: 0,
+            verified: 0,
+            risk: 0,
+            error: 0
+        };
+
+        const totalAnalyzed = Object.keys(statutes).length;
+        const totalStates = 50;
+        const isRunning = activeSession?.status === 'running';
+
+        // Count analyzed states
+        Object.values(statutes).forEach(entry => {
+            if (entry instanceof Error) {
+                counts.error++;
+            } else if (entry.trustLevel === 'suspicious' || entry.trustLevel === 'unverified' || entry.confidenceScore < 70) {
+                counts.risk++;
+            } else {
+                counts.verified++;
+            }
+        });
+
+        // Remaining states logic
+        const remaining = totalStates - totalAnalyzed;
+        if (isRunning) {
+            // If running, we can assume one is actively "loading" (the next one)
+            // But visually "pending" states are those not yet started
+            // Ideally we'd know exactly which state is currently processing.
+            // For now, let's treat all remaining as Pending, but if running, 
+            // maybe show 1 as Loading? Or just keep it simple: Pending = Remaining
+            counts.pending = remaining;
+            // The "Loading" state in the map is visual for missing data but active survey
+            // The legend count for Loading might be better as 0 unless we track concurrent requests
+            // If survey is running, at least one state is technically loading. 
+            // Let's assume remaining > 0 involved. 
+            // Actually, "Loading" in map is handled by `activeSession?.status === 'running' && !entry`.
+            // So visually, all remaining gray states pulse if running.
+            if (remaining > 0) {
+                counts.loading = remaining; // Actually they are all candidates for loading
+                counts.pending = 0; // If running, they are all "waiting/loading"
+            }
+        } else {
+            counts.pending = remaining;
+        }
+
+        return counts;
+    }, [statutes, activeSession?.status]);
+
+    const analyzedCount = Object.keys(statutes).length;
+    const percentComplete = Math.round((analyzedCount / 50) * 100);
 
     const colors = useMapColors();
 
@@ -234,75 +297,83 @@ export default function USMap({ onStateClick }: USMapProps) {
 
     return (
         <div className="w-full h-full flex flex-col">
-            {/* Controls Bar */}
-            <div className="relative flex items-center justify-between px-4 py-2 bg-card/50 backdrop-blur-sm border-b border-border">
-                <div className="flex items-center gap-4">
-                    <div className="text-sm font-medium text-muted-foreground">
-                        Progress: <span className="text-primary font-bold">{percentComplete}%</span>
-                    </div>
-                    {activeSession?.status === 'running' && (
-                        <button
-                            onClick={() => activeSession && useSurveyHistoryStore.getState().cancelSurvey(activeSession.id)}
-                            className="flex items-center gap-1.5 px-3 py-1 bg-error/10 hover:bg-error/20 text-error text-xs font-semibold rounded-full border border-error/30 transition-colors"
-                        >
-                            <X className="w-3.5 h-3.5" />
-                            Cancel Survey
-                        </button>
-                    )}
-                </div>
-
-                {/* Current Query Display */}
-                {activeSession?.query && (
-                    <div className="absolute left-1/2 -translate-x-1/2 px-4 py-1.5 bg-background/80 backdrop-blur-md rounded-full border border-border shadow-sm text-sm font-medium text-foreground max-w-md truncate">
-                        <span className="text-muted-foreground mr-2">Query:</span>
-                        &ldquo;{activeSession.query}&rdquo;
-                    </div>
-                )}
-
-                <div className="flex items-center gap-4">
-                    {/* Legend - Now using the component */}
-                    <MapLegend colors={colors} />
-                </div>
-
-                {/* Zoom Controls */}
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => setZoom((z) => Math.min(4, z + 0.25))}
-                        className="w-7 h-7 flex items-center justify-center rounded bg-muted hover:bg-accent text-foreground text-sm font-medium transition-colors"
-                        title="Zoom In"
-                    >
-                        +
-                    </button>
-                    <span className="text-xs text-muted-foreground min-w-[3rem] text-center">
-                        {Math.round(zoom * 100)}%
-                    </span>
-                    <button
-                        onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))}
-                        className="w-7 h-7 flex items-center justify-center rounded bg-muted hover:bg-accent text-foreground text-sm font-medium transition-colors"
-                        title="Zoom Out"
-                    >
-                        −
-                    </button>
-                    <button
-                        onClick={handleReset}
-                        className="ml-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                        title="Reset View"
-                    >
-                        Reset
-                    </button>
-                </div>
-            </div>
 
             {/* Map Container - fills remaining space */}
             <div
                 ref={containerRef}
-                className="flex-1 bg-card border border-border rounded-lg m-2 overflow-hidden cursor-grab active:cursor-grabbing select-none"
+                className="relative flex-1 bg-card border border-border rounded-lg m-2 overflow-hidden cursor-grab active:cursor-grabbing select-none"
                 onWheel={handleWheel}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
             >
+                {/* Floating Controls Bar */}
+                <div className="absolute top-4 left-4 right-4 z-30 flex items-center justify-between px-4 py-1.5 rounded-xl bg-background/20 backdrop-blur-md border border-white/10 shadow-2xl">
+                    <div className="flex items-center gap-4">
+                        <div className="text-xs font-medium text-muted-foreground/80 tracking-wide select-none">
+                            PROGRESS <span className="text-white font-bold ml-1">{analyzedCount}/50 ({percentComplete}%)</span>
+                        </div>
+                        {activeSession?.status === 'running' && (
+                            <button
+                                onClick={() => activeSession && useSurveyHistoryStore.getState().cancelSurvey(activeSession.id)}
+                                className="flex items-center gap-1 px-2 py-0.5 bg-error/10 hover:bg-error/20 text-error text-[10px] font-semibold rounded-full border border-error/30 transition-colors"
+                            >
+                                <X className="w-3 h-3" />
+                                CANCEL
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Current Query Display */}
+                    {activeSession?.query && (
+                        <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 px-3 py-1 bg-background/40 backdrop-blur-md rounded-full border border-white/10 shadow-sm text-xs font-medium text-white max-w-sm lg:max-w-md truncate items-baseline gap-2">
+                            <span className="text-white/60 uppercase text-[10px] tracking-wider font-bold">Query</span>
+                            <span className="truncate">&ldquo;{activeSession.query}&rdquo;</span>
+                        </div>
+                    )}
+
+                    {/* Zoom Controls */}
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setZoom((z) => Math.min(4, z + 0.25))}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-base font-medium transition-all backdrop-blur-sm border border-white/5"
+                            title="Zoom In"
+                        >
+                            +
+                        </button>
+                        <span className="text-[10px] text-white/60 min-w-[2.5rem] text-center font-mono">
+                            {Math.round(zoom * 100)}%
+                        </span>
+                        <button
+                            onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-base font-medium transition-all backdrop-blur-sm border border-white/5"
+                            title="Zoom Out"
+                        >
+                            −
+                        </button>
+
+                        <div className="w-px h-4 bg-white/10 mx-1" /> {/* Vertical divider */}
+
+                        <button
+                            onClick={handleReset}
+                            className="px-2 py-1 text-[10px] font-medium text-white/50 hover:text-white hover:bg-white/10 rounded-md transition-all uppercase tracking-wider"
+                            title="Reset View"
+                        >
+                            RESET
+                        </button>
+                        <button
+                            onClick={() => useSurveyHistoryStore.getState().setActiveSurvey(null)}
+                            className="px-2 py-1 text-[10px] font-bold text-primary hover:text-primary-foreground hover:bg-primary rounded-md transition-all uppercase tracking-wider ml-1"
+                            title="Start New Survey"
+                        >
+                            NEW
+                        </button>
+                    </div>
+                </div>
+
+                {/* Floating Legend Overlay */}
+                <MapLegend colors={colors} counts={counts} />
                 <div
                     style={{
                         transform: `translate(${position.x}px, ${position.y}px) scale(${zoom})`,
