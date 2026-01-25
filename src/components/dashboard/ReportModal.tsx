@@ -27,7 +27,7 @@ function StatusIcon({ status }: { status: Status }) {
         case 'success':
             return <ShieldCheck className="w-4 h-4 text-green-500" />;
         case 'error':
-            return <AlertOctagon className="w-4 h-4 text-red-500" />;
+            return <AlertOctagon className="w-4 h-4 text-error" />;
         case 'pending':
             return <Clock className="w-4 h-4 text-muted-foreground" />;
     }
@@ -150,7 +150,7 @@ export default function ReportModal({ isOpen, onClose }: ReportModalProps) {
                                             {successCount} Verified
                                         </span>
                                         <span className="flex items-center gap-1">
-                                            <AlertOctagon className="w-4 h-4 text-red-500" />
+                                            <AlertOctagon className="w-4 h-4 text-error" />
                                             {errorCount} Errors
                                         </span>
                                         <span className="flex items-center gap-1">

@@ -45,13 +45,38 @@ type LLMVerificationResult = z.infer<typeof LLMVerificationSchema>;
 // Model Factory
 // ============================================================
 
-function getVerificationModel(keys: { openai?: string; gemini?: string }, providerPreference?: 'openai' | 'gemini', modelName?: string): LanguageModel {
+type AiProvider = 'openai' | 'gemini' | 'openrouter';
+
+function getVerificationModel(
+    keys: { openai?: string; gemini?: string; openrouter?: string },
+    providerPreference?: AiProvider,
+    modelName?: string
+): LanguageModel {
+    // OpenRouter - uses OpenAI-compatible API
+    if (providerPreference === 'openrouter' && keys.openrouter) {
+        return createOpenAI({
+            apiKey: keys.openrouter,
+            baseURL: 'https://openrouter.ai/api/v1',
+        })(modelName || 'openai/gpt-4o-mini');
+    }
+
     if ((providerPreference === 'openai' || !providerPreference) && keys.openai) {
         return createOpenAI({ apiKey: keys.openai })(modelName || 'gpt-4o-mini');
     }
     if ((providerPreference === 'gemini' || !providerPreference) && keys.gemini) {
         return createGoogleGenerativeAI({ apiKey: keys.gemini })(modelName || 'gemini-1.5-flash');
     }
+
+    // Fallback to any available key
+    if (keys.openrouter) {
+        return createOpenAI({
+            apiKey: keys.openrouter,
+            baseURL: 'https://openrouter.ai/api/v1',
+        })('openai/gpt-4o-mini');
+    }
+    if (keys.openai) return createOpenAI({ apiKey: keys.openai })('gpt-4o-mini');
+    if (keys.gemini) return createGoogleGenerativeAI({ apiKey: keys.gemini })('gemini-1.5-flash');
+
     throw new Error('No API key provided for verification.');
 }
 
@@ -102,8 +127,8 @@ async function verifyWithLLM(
     citation: string,
     stateCode: string,
     userQuery: string,
-    keys: { openai?: string; gemini?: string },
-    providerPreference?: 'openai' | 'gemini',
+    keys: { openai?: string; gemini?: string; openrouter?: string },
+    providerPreference?: AiProvider,
     modelName?: string
 ): Promise<LLMVerificationResult> {
     const model = getVerificationModel(keys, providerPreference, modelName);
@@ -166,8 +191,8 @@ export async function verifyStatuteCitation(
     stateCode: string = 'US',
     userQuery: string = '',
     mockMode: boolean = DEFAULT_MOCK_MODE,
-    keys: { openai?: string; gemini?: string } = {},
-    providerPreference?: 'openai' | 'gemini',
+    keys: { openai?: string; gemini?: string; openrouter?: string } = {},
+    providerPreference?: AiProvider,
     modelName?: string
 ): Promise<VerificationResult> {
     const isOfficialSource = checkOfficialSource(url);
@@ -198,8 +223,8 @@ export async function verifyStatuteV2(
     statute: StatuteV2,
     userQuery: string = '',
     mockMode: boolean = DEFAULT_MOCK_MODE,
-    keys: { openai?: string; gemini?: string } = {},
-    providerPreference?: 'openai' | 'gemini',
+    keys: { openai?: string; gemini?: string; openrouter?: string } = {},
+    providerPreference?: AiProvider,
     modelName?: string
 ): Promise<VerificationResult> {
     return verifyStatuteCitation(

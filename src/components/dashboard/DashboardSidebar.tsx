@@ -27,6 +27,16 @@ export function DashboardSidebar({ activeTab = 'workspace' }: DashboardSidebarPr
     const completedSurveys = surveys.filter((s) => s.status === 'completed').length;
     const totalSuccess = surveys.reduce((acc, s) => acc + s.successCount, 0);
     const totalErrors = surveys.reduce((acc, s) => acc + s.errorCount, 0);
+
+    // Calculate Risk (Low confidence or Suspicious)
+    const totalRisk = surveys.reduce((acc, survey) => {
+        const riskInSurvey = Object.values(survey.statutes || {}).filter(entry => {
+            if (!entry || entry instanceof Error) return false;
+            return entry.confidenceScore < 85 || entry.trustLevel === 'suspicious';
+        }).length;
+        return acc + riskInSurvey;
+    }, 0);
+
     const successRate = totalSuccess + totalErrors > 0
         ? Math.round((totalSuccess / (totalSuccess + totalErrors)) * 100)
         : 0;
@@ -87,7 +97,7 @@ export function DashboardSidebar({ activeTab = 'workspace' }: DashboardSidebarPr
                         </div>
                         <span className={cn(
                             'text-sm font-semibold',
-                            successRate >= 80 ? 'text-green-500' : successRate >= 50 ? 'text-yellow-500' : 'text-red-500'
+                            successRate >= 80 ? 'text-green-500' : successRate >= 50 ? 'text-risk' : 'text-error'
                         )}>
                             {successRate}%
                         </span>
@@ -102,13 +112,22 @@ export function DashboardSidebar({ activeTab = 'workspace' }: DashboardSidebarPr
                         <span className="text-sm font-semibold text-green-500">{totalSuccess}</span>
                     </div>
 
+                    {/* At Risk */}
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <AlertCircle className="w-4 h-4" />
+                            At Risk
+                        </div>
+                        <span className="text-sm font-semibold text-risk">{totalRisk}</span>
+                    </div>
+
                     {/* Errors */}
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <AlertCircle className="w-4 h-4" />
                             Errors
                         </div>
-                        <span className="text-sm font-semibold text-red-500">{totalErrors}</span>
+                        <span className="text-sm font-semibold text-error">{totalErrors}</span>
                     </div>
                 </div>
             </div>
@@ -119,7 +138,7 @@ export function DashboardSidebar({ activeTab = 'workspace' }: DashboardSidebarPr
                     Lawvics v1.0
                 </div>
             </div>
-        </aside>
+        </aside >
     );
 }
 

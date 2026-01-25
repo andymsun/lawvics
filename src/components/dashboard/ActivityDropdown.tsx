@@ -22,7 +22,7 @@ function getActivityIcon(iconType: Activity['icon']) {
 function getIconColor(iconType: Activity['icon']) {
     switch (iconType) {
         case 'error':
-            return 'text-red-500';
+            return 'text-error';
         case 'success':
             return 'text-green-500';
         case 'survey':
