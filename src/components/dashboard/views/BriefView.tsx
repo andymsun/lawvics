@@ -5,11 +5,12 @@ import { useSurveyHistoryStore, useShallow, StatuteEntry } from '@/lib/store';
 import { useSettingsStore } from '@/lib/store';
 import { US_STATES } from '@/lib/constants/states';
 import { StateCode, Statute } from '@/types/statute';
-import { FileText, Loader2, RefreshCw, CheckCircle, AlertTriangle, XCircle, Clock, Download, ChevronDown, FileJson, FileType } from 'lucide-react';
+import { FileText, Loader2, RefreshCw, CheckCircle, AlertTriangle, XCircle, Clock, Download, ChevronDown, FileJson, FileType, Scale, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isDemoQuery } from '@/lib/agents/orchestrator';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
+import remarkGfm from 'remark-gfm';
 import { jsPDF } from 'jspdf';
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, BorderStyle, WidthType, HeadingLevel, AlignmentType } from 'docx';
 import { saveAs } from 'file-saver';
@@ -93,16 +94,23 @@ interface BriefData {
 export default function BriefView() {
     const [isGenerating, setIsGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // Full survey document generation state
+    const [isGeneratingFullSurvey, setIsGeneratingFullSurvey] = useState(false);
+    const [fullSurveyStreamContent, setFullSurveyStreamContent] = useState<string>('');
+    const [fullSurveyError, setFullSurveyError] = useState<string | null>(null);
+    const [showFullSurvey, setShowFullSurvey] = useState(false);
 
     const activeSession = useSurveyHistoryStore(
         useShallow((state) => state.surveys.find((s) => s.id === state.activeSurveyId))
     );
     const setBriefSummary = useSurveyHistoryStore((state) => state.setBriefSummary);
+    const setFullSurveyDocument = useSurveyHistoryStore((state) => state.setFullSurveyDocument);
 
     const settings = useSettingsStore();
 
     // Use stored summary from session, not local state
     const storedSummary = activeSession?.briefSummary ?? null;
+    const storedFullSurvey = activeSession?.fullSurveyDocument ?? null;
 
     const statutes = useMemo<Partial<Record<StateCode, StatuteEntry>>>(() =>
         activeSession?.statutes ?? {},
@@ -258,8 +266,94 @@ export default function BriefView() {
         }
     };
 
+    // Generate full professional survey document with streaming
+    const generateFullSurvey = async () => {
+        if (!briefData || !activeSession) return;
+
+        setIsGeneratingFullSurvey(true);
+        setFullSurveyError(null);
+        setFullSurveyStreamContent('');
+        setShowFullSurvey(true);
+
+        try {
+            // Prepare all statutes for the full survey
+            const validStatutes = Object.values(statutes)
+                .filter((s): s is Statute => s !== undefined && !(s instanceof Error))
+                .map(s => `[${s.stateCode}] ${s.citation}: ${s.textSnippet?.slice(0, 500) || 'No text'}`);
+
+            // Determine provider/model based on data source
+            const isSystemApi = settings.dataSource === 'system-api';
+            const effectiveProvider = isSystemApi ? 'openrouter' : settings.activeAiProvider;
+            const effectiveModel = isSystemApi
+                ? 'openai/gpt-4o-mini'
+                : (settings.activeAiProvider === 'openai'
+                    ? settings.openaiModel
+                    : settings.activeAiProvider === 'gemini'
+                        ? settings.geminiModel
+                        : settings.openRouterModel);
+
+            const response = await fetch('/api/statute/survey-document', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-data-source': settings.dataSource,
+                },
+                body: JSON.stringify({
+                    query: briefData.query,
+                    statutes: validStatutes,
+                    metadata: {
+                        verified: briefData.verifiedCount,
+                        unverified: briefData.unverifiedCount,
+                        errors: briefData.errorCount,
+                        avgConfidence: briefData.avgConfidence,
+                    },
+                    dataSource: settings.dataSource,
+                    provider: effectiveProvider,
+                    model: effectiveModel,
+                    openaiApiKey: isSystemApi ? undefined : settings.openaiApiKey,
+                    geminiApiKey: isSystemApi ? undefined : settings.geminiApiKey,
+                    openRouterApiKey: settings.openRouterApiKey,
+                }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to generate survey document');
+            }
+
+            // Handle streaming response
+            const reader = response.body?.getReader();
+            if (!reader) {
+                throw new Error('No response body');
+            }
+
+            const decoder = new TextDecoder();
+            let accumulatedContent = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                // toTextStreamResponse returns plain text chunks
+                const chunk = decoder.decode(value, { stream: true });
+                accumulatedContent += chunk;
+                setFullSurveyStreamContent(accumulatedContent);
+            }
+
+            // Store the final document
+            if (accumulatedContent) {
+                setFullSurveyDocument(activeSession.id, accumulatedContent);
+            }
+        } catch (err) {
+            setFullSurveyError(err instanceof Error ? err.message : 'Failed to generate survey');
+        } finally {
+            setIsGeneratingFullSurvey(false);
+        }
+    };
+
     // Auto-generate summary when survey completes and no summary exists
     const canGenerateSummary = activeSession?.status === 'completed';
+
 
     React.useEffect(() => {
         if (canGenerateSummary && !storedSummary && !isGenerating && briefData) {
@@ -298,6 +392,14 @@ export default function BriefView() {
                 lines.push(``);
             }
 
+            // Full Professional Survey Document
+            if (storedFullSurvey) {
+                lines.push(`## Full Professional Survey Document`);
+                lines.push(``);
+                lines.push(storedFullSurvey);
+                lines.push(``);
+            }
+
             lines.push(`## Regional Coverage`);
             lines.push(``);
             lines.push(`| Region | Coverage |`);
@@ -327,6 +429,61 @@ export default function BriefView() {
             const doc = new jsPDF();
             const pageWidth = doc.internal.pageSize.width;
             const margin = 20;
+
+            // Helper function to render text with inline bold (**)
+            const renderBoldText = (pdf: jsPDF, text: string, x: number, yPos: number, maxWidth: number): number => {
+                // Split text into segments (bold and non-bold)
+                const segments: { text: string; bold: boolean }[] = [];
+                const regex = /\*\*([^*]+)\*\*/g;
+                let lastIndex = 0;
+                let match;
+
+                while ((match = regex.exec(text)) !== null) {
+                    if (match.index > lastIndex) {
+                        segments.push({ text: text.slice(lastIndex, match.index), bold: false });
+                    }
+                    segments.push({ text: match[1], bold: true });
+                    lastIndex = regex.lastIndex;
+                }
+                if (lastIndex < text.length) {
+                    segments.push({ text: text.slice(lastIndex), bold: false });
+                }
+
+                // If no bold segments, just render normally
+                if (segments.length === 0 || (segments.length === 1 && !segments[0].bold)) {
+                    pdf.setFont('helvetica', 'normal');
+                    const wrapped = pdf.splitTextToSize(text, maxWidth - x);
+                    wrapped.forEach((line: string, idx: number) => {
+                        pdf.text(line, x, yPos + idx * 4);
+                    });
+                    return wrapped.length;
+                }
+
+                // Render segments with proper font switching
+                let currentX = x;
+                let currentLine = 0;
+                const lineHeight = 4;
+
+                segments.forEach((seg) => {
+                    pdf.setFont('helvetica', seg.bold ? 'bold' : 'normal');
+                    const words = seg.text.split(' ');
+
+                    words.forEach((word, idx) => {
+                        const wordWithSpace = idx < words.length - 1 ? word + ' ' : word;
+                        const wordWidth = pdf.getTextWidth(wordWithSpace);
+
+                        if (currentX + wordWidth > maxWidth && currentX > x) {
+                            currentLine++;
+                            currentX = x;
+                        }
+
+                        pdf.text(wordWithSpace, currentX, yPos + currentLine * lineHeight);
+                        currentX += wordWidth;
+                    });
+                });
+
+                return currentLine + 1;
+            };
 
             // Title
             doc.setFontSize(22);
@@ -378,6 +535,163 @@ export default function BriefView() {
                 const summaryLines = doc.splitTextToSize(cleanSummary, pageWidth - (margin * 2));
                 doc.text(summaryLines, margin, y);
                 y += (summaryLines.length * 5) + 15;
+            }
+
+            // Full Professional Survey Document (if available)
+            if (storedFullSurvey) {
+                if (y > 250) { doc.addPage(); y = 20; }
+
+                doc.setFontSize(16);
+                doc.setFont('helvetica', 'bold');
+                doc.text('Full Professional Survey Document', margin, y);
+                y += 12;
+
+                // Parse and render markdown properly
+                const lines = storedFullSurvey.split('\n');
+                let inTable = false;
+                let tableRows: string[][] = [];
+
+                const renderTable = () => {
+                    if (tableRows.length === 0) return;
+
+                    // Calculate column widths
+                    const numCols = tableRows[0]?.length || 0;
+                    const colWidth = (pageWidth - margin * 2) / numCols;
+
+                    doc.setFontSize(8);
+                    tableRows.forEach((row, rowIdx) => {
+                        if (y > 270) { doc.addPage(); y = 20; }
+
+                        let maxHeight = 0;
+                        const cellTexts: string[][] = [];
+
+                        row.forEach((cell, colIdx) => {
+                            const cellText = doc.splitTextToSize(cell.trim(), colWidth - 4);
+                            cellTexts.push(cellText);
+                            maxHeight = Math.max(maxHeight, cellText.length * 3.5);
+                        });
+
+                        // Draw cells
+                        row.forEach((_, colIdx) => {
+                            const x = margin + colIdx * colWidth;
+                            doc.setDrawColor(200);
+                            doc.rect(x, y - 3, colWidth, maxHeight + 4);
+
+                            if (rowIdx === 0) {
+                                doc.setFillColor(245, 245, 245);
+                                doc.rect(x, y - 3, colWidth, maxHeight + 4, 'F');
+                                doc.setFont('helvetica', 'bold');
+                            } else {
+                                doc.setFont('helvetica', 'normal');
+                            }
+
+                            cellTexts[colIdx].forEach((textLine: string, lineIdx: number) => {
+                                doc.text(textLine, x + 2, y + lineIdx * 3.5);
+                            });
+                        });
+
+                        y += maxHeight + 4;
+                    });
+
+                    tableRows = [];
+                    y += 4;
+                    doc.setFontSize(10);
+                };
+
+                lines.forEach((line) => {
+                    // Check for table row (starts with |)
+                    if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+                        // Skip separator rows (|---|---|)
+                        if (line.includes('---')) {
+                            inTable = true;
+                            return;
+                        }
+                        inTable = true;
+                        const cells = line.split('|').filter(c => c.trim() !== '');
+                        tableRows.push(cells);
+                        return;
+                    } else if (inTable) {
+                        renderTable();
+                        inTable = false;
+                    }
+
+                    // Check for headings
+                    const h1Match = line.match(/^#\s+(.+)/);
+                    const h2Match = line.match(/^##\s+(.+)/);
+                    const h3Match = line.match(/^###\s+(.+)/);
+                    const h4Match = line.match(/^####\s+(.+)/);
+
+                    if (h1Match) {
+                        if (y > 250) { doc.addPage(); y = 20; }
+                        y += 6;
+                        doc.setFontSize(14);
+                        doc.setFont('helvetica', 'bold');
+                        doc.text(h1Match[1], margin, y);
+                        // Underline for h1
+                        doc.setDrawColor(180);
+                        doc.line(margin, y + 2, pageWidth - margin, y + 2);
+                        y += 8;
+                        return;
+                    }
+                    if (h2Match) {
+                        if (y > 260) { doc.addPage(); y = 20; }
+                        y += 4;
+                        doc.setFontSize(12);
+                        doc.setFont('helvetica', 'bold');
+                        doc.text(h2Match[1], margin, y);
+                        y += 6;
+                        return;
+                    }
+                    if (h3Match) {
+                        if (y > 265) { doc.addPage(); y = 20; }
+                        y += 3;
+                        doc.setFontSize(11);
+                        doc.setFont('helvetica', 'bold');
+                        doc.text(h3Match[1], margin, y);
+                        y += 5;
+                        return;
+                    }
+                    if (h4Match) {
+                        if (y > 268) { doc.addPage(); y = 20; }
+                        y += 2;
+                        doc.setFontSize(10);
+                        doc.setFont('helvetica', 'bold');
+                        doc.text(h4Match[1], margin, y);
+                        y += 4;
+                        return;
+                    }
+
+                    // Empty line - small gap
+                    if (!line.trim()) {
+                        y += 2;
+                        return;
+                    }
+
+                    // Bullet points
+                    const bulletMatch = line.match(/^[\s]*[-*•]\s+(.+)/);
+                    if (bulletMatch) {
+                        if (y > 270) { doc.addPage(); y = 20; }
+                        doc.setFontSize(10);
+                        doc.setFont('helvetica', 'normal');
+                        doc.text('•', margin + 2, y);
+                        const bulletText = renderBoldText(doc, bulletMatch[1], margin + 8, y, pageWidth - margin - 8);
+                        y += Math.max(bulletText * 4, 4);
+                        return;
+                    }
+
+                    // Regular paragraph with bold support
+                    if (y > 270) { doc.addPage(); y = 20; }
+                    doc.setFontSize(10);
+                    const textLines = renderBoldText(doc, line, margin, y, pageWidth - margin);
+                    y += textLines * 4;
+                });
+
+                // Render any remaining table
+                if (inTable && tableRows.length > 0) {
+                    renderTable();
+                }
+
+                y += 8;
             }
 
             // Results Table Header
@@ -500,6 +814,40 @@ export default function BriefView() {
                             text: cleanLine,
                             spacing: { after: 100 }
                         }));
+                    }
+                });
+            }
+
+            // Full Professional Survey Document (if available)
+            if (storedFullSurvey) {
+                children.push(new Paragraph({
+                    text: "Full Professional Survey Document",
+                    heading: HeadingLevel.HEADING_2,
+                    spacing: { before: 400, after: 100 }
+                }));
+
+                const surveyLines = storedFullSurvey.split('\n');
+                surveyLines.forEach(line => {
+                    if (line.trim()) {
+                        // Detect headings
+                        const headingMatch = line.match(/^(#{1,4})\s+(.+)/);
+                        if (headingMatch) {
+                            const level = headingMatch[1].length;
+                            const headingLevel = level === 1 ? HeadingLevel.HEADING_2 :
+                                level === 2 ? HeadingLevel.HEADING_3 :
+                                    level === 3 ? HeadingLevel.HEADING_4 : HeadingLevel.HEADING_5;
+                            children.push(new Paragraph({
+                                text: headingMatch[2],
+                                heading: headingLevel,
+                                spacing: { before: 200, after: 100 }
+                            }));
+                        } else {
+                            const cleanLine = line.replace(/\*\*/g, '').replace(/\*/g, '');
+                            children.push(new Paragraph({
+                                text: cleanLine,
+                                spacing: { after: 80 }
+                            }));
+                        }
                     }
                 });
             }
@@ -650,6 +998,35 @@ export default function BriefView() {
                             )}
                         </button>
                     )}
+                    {/* Generate Full Professional Survey Button */}
+                    {canGenerateSummary && (
+                        <button
+                            onClick={generateFullSurvey}
+                            disabled={isGeneratingFullSurvey}
+                            className={cn(
+                                "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                                "bg-primary text-primary-foreground hover:bg-primary/90",
+                                "disabled:opacity-50 disabled:cursor-not-allowed"
+                            )}
+                        >
+                            {isGeneratingFullSurvey ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    Generating Survey...
+                                </>
+                            ) : storedFullSurvey ? (
+                                <>
+                                    <Scale className="w-4 h-4" />
+                                    Regenerate Full Survey
+                                </>
+                            ) : (
+                                <>
+                                    <Scale className="w-4 h-4" />
+                                    Generate Professional Survey
+                                </>
+                            )}
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -711,7 +1088,7 @@ export default function BriefView() {
                     ) : (
                         <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed max-h-[500px] overflow-y-auto">
                             <ReactMarkdown
-                                remarkPlugins={[remarkBreaks]}
+                                remarkPlugins={[remarkGfm, remarkBreaks]}
                                 components={{
                                     h2: ({ children }) => <h2 className="text-lg font-semibold text-foreground mt-4 mb-2 first:mt-0">{children}</h2>,
                                     h3: ({ children }) => <h3 className="text-base font-semibold text-foreground mt-3 mb-1">{children}</h3>,
@@ -772,6 +1149,87 @@ export default function BriefView() {
                     </tbody>
                 </table>
             </div>
+
+            {/* Full Professional Survey Document Section */}
+            {(showFullSurvey || storedFullSurvey) && (
+                <div className="flex-shrink-0 mt-6">
+                    <div className="p-4 rounded-lg bg-card border border-border">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                                <Scale className="w-5 h-5 text-primary" />
+                                <h3 className="text-base font-semibold text-foreground">Professional 50-State Survey Document</h3>
+                            </div>
+                            <button
+                                onClick={() => setShowFullSurvey(!showFullSurvey)}
+                                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                                {showFullSurvey ? (
+                                    <>
+                                        <ChevronUp className="w-4 h-4" />
+                                        Collapse
+                                    </>
+                                ) : (
+                                    <>
+                                        <ChevronDown className="w-4 h-4" />
+                                        Expand
+                                    </>
+                                )}
+                            </button>
+                        </div>
+
+                        {showFullSurvey && (
+                            <>
+                                {/* Error display */}
+                                {fullSurveyError && (
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <p className="text-sm text-error flex-1">{fullSurveyError}</p>
+                                        <button
+                                            onClick={generateFullSurvey}
+                                            className="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium bg-error/10 text-error hover:bg-error/20 transition-colors"
+                                        >
+                                            <RefreshCw className="w-3 h-3" />
+                                            Retry
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* Streaming/Loading state */}
+                                {isGeneratingFullSurvey && (
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Generating professional survey document... This may take 30-60 seconds.
+                                    </div>
+                                )}
+
+                                {/* Document content */}
+                                {(fullSurveyStreamContent || storedFullSurvey) && (
+                                    <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed max-h-[600px] overflow-y-auto">
+                                        <ReactMarkdown
+                                            remarkPlugins={[remarkGfm, remarkBreaks]}
+                                            components={{
+                                                h1: ({ children }) => <h1 className="text-xl font-bold text-foreground border-b border-border pb-2 mb-3">{children}</h1>,
+                                                h2: ({ children }) => <h2 className="text-lg font-semibold text-foreground mt-4 mb-2 first:mt-0">{children}</h2>,
+                                                h3: ({ children }) => <h3 className="text-base font-semibold text-foreground mt-3 mb-1">{children}</h3>,
+                                                strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                                                em: ({ children }) => <em className="italic text-muted-foreground">{children}</em>,
+                                                ul: ({ children }) => <ul className="list-disc pl-5 my-2 space-y-1">{children}</ul>,
+                                                ol: ({ children }) => <ol className="list-decimal pl-5 my-2 space-y-1">{children}</ol>,
+                                                li: ({ children }) => <li className="text-muted-foreground">{children}</li>,
+                                                p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+                                                table: ({ children }) => <table className="w-full border-collapse border border-border my-4">{children}</table>,
+                                                th: ({ children }) => <th className="border border-border bg-muted px-3 py-2 text-left font-semibold text-sm">{children}</th>,
+                                                td: ({ children }) => <td className="border border-border px-3 py-2 text-sm">{children}</td>,
+                                            }}
+                                        >
+                                            {fullSurveyStreamContent || storedFullSurvey || ''}
+                                        </ReactMarkdown>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Footer */}
             <div className="flex-shrink-0 mt-4 text-xs text-muted-foreground text-center">

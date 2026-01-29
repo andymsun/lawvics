@@ -139,6 +139,8 @@ export interface SurveyRecord {
     statutes: Partial<Record<StateCode, StatuteEntry>>;
     /** AI-generated executive summary for this survey */
     briefSummary?: string;
+    /** Full professional 50-state survey document (markdown) */
+    fullSurveyDocument?: string;
 }
 
 interface SurveyHistoryState {
@@ -163,6 +165,8 @@ interface SurveyHistoryActions {
     deleteSurvey: (id: number) => void;
     /** Set the AI-generated brief summary for a survey */
     setBriefSummary: (surveyId: number, summary: string) => void;
+    /** Set the full professional survey document for a survey */
+    setFullSurveyDocument: (surveyId: number, document: string) => void;
 }
 
 export type SurveyHistoryStore = SurveyHistoryState & SurveyHistoryActions;
@@ -274,6 +278,13 @@ export const useSurveyHistoryStore = create<SurveyHistoryStore>()(
                 set((state) => ({
                     surveys: state.surveys.map((s) =>
                         s.id === surveyId ? { ...s, briefSummary: summary } : s
+                    ),
+                })),
+
+            setFullSurveyDocument: (surveyId, document) =>
+                set((state) => ({
+                    surveys: state.surveys.map((s) =>
+                        s.id === surveyId ? { ...s, fullSurveyDocument: document } : s
                     ),
                 })),
 
