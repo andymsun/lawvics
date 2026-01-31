@@ -24,21 +24,39 @@ interface SystemConfig {
     enable_demo_mode: boolean;
 }
 
+type ModelTag = 'fastest' | 'smartest' | 'writing' | 'balanced';
+
 interface ModelInfo {
     value: string;
     label: string;
     description: string;
     contextLength: number;
     maxOutput: number;
+    isFree?: boolean;
+    tags?: ModelTag[];
+    pricePerMillion?: number;
 }
 
-// Fallback models if API fails
-const FALLBACK_MODELS: ModelInfo[] = [
-    { value: 'deepseek/deepseek-chat:free', label: 'DeepSeek Chat (64K context)', description: 'GPT-4 level performance, great for reasoning', contextLength: 64000, maxOutput: 8192 },
-    { value: 'mistralai/mistral-small-3.1-24b-instruct:free', label: 'Mistral Small 3.1 (128K context)', description: 'Excellent for long documents and surveys', contextLength: 128000, maxOutput: 8192 },
-    { value: 'google/gemini-2.0-flash-exp:free', label: 'Gemini 2.0 Flash (1M context)', description: 'Very fast, massive context window', contextLength: 1000000, maxOutput: 8192 },
-    { value: 'qwen/qwen-2.5-72b-instruct:free', label: 'Qwen 2.5 72B (32K context)', description: 'Great for structured output and analysis', contextLength: 32000, maxOutput: 8192 },
-    { value: 'meta-llama/llama-3.3-70b-instruct:free', label: 'Llama 3.3 70B (128K context)', description: 'Reliable general-purpose model', contextLength: 128000, maxOutput: 8192 },
+// Tag styling
+const TAG_STYLES: Record<ModelTag, { bg: string; text: string; label: string }> = {
+    fastest: { bg: 'bg-green-500/10', text: 'text-green-600 dark:text-green-400', label: '⚡ Fastest' },
+    smartest: { bg: 'bg-purple-500/10', text: 'text-purple-600 dark:text-purple-400', label: '🧠 Smartest' },
+    writing: { bg: 'bg-blue-500/10', text: 'text-blue-600 dark:text-blue-400', label: '✍️ Writing' },
+    balanced: { bg: 'bg-gray-500/10', text: 'text-gray-600 dark:text-gray-400', label: '⚖️ Balanced' },
+};
+
+// Fallback free models if API fails
+const FALLBACK_FREE_MODELS: ModelInfo[] = [
+    { value: 'deepseek/deepseek-chat:free', label: 'DeepSeek Chat (64K)', description: 'GPT-4 level performance', contextLength: 64000, maxOutput: 8192, isFree: true, tags: ['smartest', 'balanced'] },
+    { value: 'google/gemini-2.0-flash-exp:free', label: 'Gemini 2.0 Flash (1M)', description: 'Ultra fast, massive context', contextLength: 1000000, maxOutput: 8192, isFree: true, tags: ['fastest'] },
+    { value: 'mistralai/mistral-small-3.1-24b-instruct:free', label: 'Mistral Small 3.1 (128K)', description: 'Great for writing', contextLength: 128000, maxOutput: 8192, isFree: true, tags: ['writing', 'balanced'] },
+];
+
+// Fallback paid models if API fails
+const FALLBACK_PAID_MODELS: ModelInfo[] = [
+    { value: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet (200K)', description: 'Best for legal writing', contextLength: 200000, maxOutput: 8192, isFree: false, tags: ['smartest', 'writing'], pricePerMillion: 3 },
+    { value: 'openai/gpt-4o', label: 'GPT-4o (128K)', description: 'OpenAI flagship', contextLength: 128000, maxOutput: 16384, isFree: false, tags: ['smartest', 'balanced'], pricePerMillion: 5 },
+    { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini (128K)', description: 'Fast and cheap', contextLength: 128000, maxOutput: 16384, isFree: false, tags: ['fastest', 'balanced'], pricePerMillion: 0.15 },
 ];
 
 // ============================================================
@@ -52,7 +70,8 @@ export default function AdminPage() {
     const [isSaving, setIsSaving] = useState(false);
     const [testingModel, setTestingModel] = useState<'search' | 'document' | null>(null);
     const [testResults, setTestResults] = useState<{ search?: { success: boolean; latency?: number; error?: string }; document?: { success: boolean; latency?: number; error?: string } }>({});
-    const [availableModels, setAvailableModels] = useState<ModelInfo[]>(FALLBACK_MODELS);
+    const [freeModels, setFreeModels] = useState<ModelInfo[]>(FALLBACK_FREE_MODELS);
+    const [paidModels, setPaidModels] = useState<ModelInfo[]>(FALLBACK_PAID_MODELS);
     const [isLoadingModels, setIsLoadingModels] = useState(false);
     const [selectedModelInfo, setSelectedModelInfo] = useState<{ search?: ModelInfo; document?: ModelInfo }>({});
     const [config, setConfig] = useState<SystemConfig>({
@@ -67,6 +86,9 @@ export default function AdminPage() {
         enable_demo_mode: true,
     });
 
+    // All models combined for lookup
+    const allModels = [...freeModels, ...paidModels];
+
     // Fetch current config and available models on mount
     useEffect(() => {
         fetchConfig();
@@ -75,19 +97,25 @@ export default function AdminPage() {
 
     // Update selected model info when config or models change
     useEffect(() => {
-        const searchModel = availableModels.find(m => m.value === config.search_model);
-        const documentModel = availableModels.find(m => m.value === config.document_model);
+        const searchModel = allModels.find(m => m.value === config.search_model);
+        const documentModel = allModels.find(m => m.value === config.document_model);
         setSelectedModelInfo({ search: searchModel, document: documentModel });
-    }, [config, availableModels]);
+    }, [config, freeModels, paidModels]);
 
     const fetchAvailableModels = async () => {
         setIsLoadingModels(true);
         try {
             const res = await fetch('/api/admin/models');
             const data = await res.json();
-            if (data.success && data.models?.length > 0) {
-                setAvailableModels(data.models);
-                toast.success(`Loaded ${data.models.length} free models from OpenRouter`);
+            if (data.success) {
+                if (data.freeModels?.length > 0) {
+                    setFreeModels(data.freeModels);
+                }
+                if (data.paidModels?.length > 0) {
+                    setPaidModels(data.paidModels);
+                }
+                const total = (data.freeModels?.length || 0) + (data.paidModels?.length || 0);
+                toast.success(`Loaded ${total} models (${data.freeModels?.length || 0} free, ${data.paidModels?.length || 0} paid)`);
             }
         } catch (error) {
             console.error('Failed to fetch models:', error);
@@ -332,11 +360,20 @@ export default function AdminPage() {
                                     onChange={(e) => setConfig({ ...config, search_model: e.target.value })}
                                     className="flex-1 px-3 py-2 bg-muted border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                                 >
-                                    {availableModels.map((model: ModelInfo) => (
-                                        <option key={model.value} value={model.value}>
-                                            {model.label}
-                                        </option>
-                                    ))}
+                                    <optgroup label="🆓 Free Models">
+                                        {freeModels.map((model: ModelInfo) => (
+                                            <option key={model.value} value={model.value}>
+                                                {model.label} {model.tags?.map(t => TAG_STYLES[t].label.split(' ')[0]).join('')}
+                                            </option>
+                                        ))}
+                                    </optgroup>
+                                    <optgroup label="💰 Paid Models (Requires OPENROUTER_API_KEY)">
+                                        {paidModels.map((model: ModelInfo) => (
+                                            <option key={model.value} value={model.value}>
+                                                {model.label} {model.tags?.map(t => TAG_STYLES[t].label.split(' ')[0]).join('')} ~${model.pricePerMillion?.toFixed(2)}/M
+                                            </option>
+                                        ))}
+                                    </optgroup>
                                 </select>
                                 <button
                                     onClick={() => testModel('search')}
@@ -359,15 +396,23 @@ export default function AdminPage() {
                             {selectedModelInfo.search && (
                                 <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded-md">
                                     <p>{selectedModelInfo.search.description}</p>
+                                    <div className="mt-1 flex flex-wrap gap-1">
+                                        {selectedModelInfo.search.tags?.map(tag => (
+                                            <span key={tag} className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${TAG_STYLES[tag].bg} ${TAG_STYLES[tag].text}`}>
+                                                {TAG_STYLES[tag].label}
+                                            </span>
+                                        ))}
+                                    </div>
                                     <p className="mt-1 font-medium">
-                                        Context: {Math.round(selectedModelInfo.search.contextLength / 1000)}K tokens |
-                                        Max output: {Math.round(selectedModelInfo.search.maxOutput / 1000)}K tokens
+                                        Context: {Math.round(selectedModelInfo.search.contextLength / 1000)}K |
+                                        Max output: {Math.round(selectedModelInfo.search.maxOutput / 1000)}K
+                                        {selectedModelInfo.search.pricePerMillion ? ` | ~$${selectedModelInfo.search.pricePerMillion.toFixed(2)}/M tokens` : ' | FREE'}
                                     </p>
                                 </div>
                             )}
                             <div className="flex items-center gap-2">
                                 <p className="text-xs text-muted-foreground flex-1">
-                                    Used for 50-state surveys and individual searches.
+                                    Used for 50-state surveys and individual searches. ⚡ = Fastest, 🧠 = Smartest, ✍️ = Best for Writing
                                 </p>
                                 {testResults.search?.latency && (
                                     <span className="text-xs text-green-500">✓ {testResults.search.latency}ms</span>
@@ -390,11 +435,20 @@ export default function AdminPage() {
                                     onChange={(e) => setConfig({ ...config, document_model: e.target.value })}
                                     className="flex-1 px-3 py-2 bg-muted border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                                 >
-                                    {availableModels.map((model: ModelInfo) => (
-                                        <option key={model.value} value={model.value}>
-                                            {model.label}
-                                        </option>
-                                    ))}
+                                    <optgroup label="🆓 Free Models">
+                                        {freeModels.map((model: ModelInfo) => (
+                                            <option key={model.value} value={model.value}>
+                                                {model.label} {model.tags?.map(t => TAG_STYLES[t].label.split(' ')[0]).join('')}
+                                            </option>
+                                        ))}
+                                    </optgroup>
+                                    <optgroup label="💰 Paid Models (Requires OPENROUTER_API_KEY)">
+                                        {paidModels.map((model: ModelInfo) => (
+                                            <option key={model.value} value={model.value}>
+                                                {model.label} {model.tags?.map(t => TAG_STYLES[t].label.split(' ')[0]).join('')} ~${model.pricePerMillion?.toFixed(2)}/M
+                                            </option>
+                                        ))}
+                                    </optgroup>
                                 </select>
                                 <button
                                     onClick={() => testModel('document')}
@@ -417,15 +471,23 @@ export default function AdminPage() {
                             {selectedModelInfo.document && (
                                 <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded-md">
                                     <p>{selectedModelInfo.document.description}</p>
+                                    <div className="mt-1 flex flex-wrap gap-1">
+                                        {selectedModelInfo.document.tags?.map(tag => (
+                                            <span key={tag} className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${TAG_STYLES[tag].bg} ${TAG_STYLES[tag].text}`}>
+                                                {TAG_STYLES[tag].label}
+                                            </span>
+                                        ))}
+                                    </div>
                                     <p className="mt-1 font-medium">
-                                        Context: {Math.round(selectedModelInfo.document.contextLength / 1000)}K tokens |
-                                        Max output: {Math.round(selectedModelInfo.document.maxOutput / 1000)}K tokens
+                                        Context: {Math.round(selectedModelInfo.document.contextLength / 1000)}K |
+                                        Max output: {Math.round(selectedModelInfo.document.maxOutput / 1000)}K
+                                        {selectedModelInfo.document.pricePerMillion ? ` | ~$${selectedModelInfo.document.pricePerMillion.toFixed(2)}/M tokens` : ' | FREE'}
                                     </p>
                                 </div>
                             )}
                             <div className="flex items-center gap-2">
                                 <p className="text-xs text-muted-foreground flex-1">
-                                    Used for executive summaries and professional survey documents (40-100+ pages).
+                                    For briefs & surveys: ✍️ Writing models recommended. Use 🧠 Smartest for complex legal analysis.
                                 </p>
                                 {testResults.document?.latency && (
                                     <span className="text-xs text-green-500">✓ {testResults.document.latency}ms</span>
