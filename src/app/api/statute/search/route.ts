@@ -315,12 +315,21 @@ async function scrapeStateStatute(
     };
 
     // Check Admin Config for Proxy Toggle
-    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
-    const { data: configData } = await supabase.from('system_config').select('key, value');
-    const proxyConfig = configData?.find(r => r.key === 'enable_proxy');
     let enableProxy = true;
-    if (proxyConfig?.value) {
-        try { enableProxy = JSON.parse(proxyConfig.value); } catch { /* default true */ }
+    try {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+        if (supabaseUrl && supabaseKey) {
+            const supabase = createClient(supabaseUrl, supabaseKey);
+            const { data: configData } = await supabase.from('system_config').select('key, value');
+            const proxyConfig = configData?.find(r => r.key === 'enable_proxy');
+            if (proxyConfig?.value) {
+                try { enableProxy = JSON.parse(proxyConfig.value); } catch { /* default true */ }
+            }
+        }
+    } catch (e) {
+        console.warn('Failed to fetch proxy config, defaulting to enabled:', e);
     }
 
     const genericProxyUrl = process.env.SCRAPING_PROXY_URL; // e.g. "http://api.scraperapi.com/?api_key=XXX&url="

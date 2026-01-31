@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSurveyHistoryStore, useShallow, StatuteEntry } from '@/lib/store';
@@ -13,6 +13,7 @@ import StatuteDetailPanel from '@/components/dashboard/StatuteDetailPanel';
 import ReportModal from '@/components/dashboard/ReportModal';
 import { cn } from '@/lib/utils';
 import { BrandLogo } from '@/components/ui/BrandLogo';
+import { MaintenanceOverlay } from '@/components/dashboard/MaintenanceOverlay';
 
 export default function DashboardLayout({
     children,
@@ -21,6 +22,20 @@ export default function DashboardLayout({
 }) {
     const pathname = usePathname();
     const [isReportOpen, setIsReportOpen] = useState(false);
+    const [isMaintenance, setIsMaintenance] = useState(false);
+
+    // Check Maintenance Mode
+    useEffect(() => {
+        fetch('/api/admin/config')
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.data?.maintenance_mode) {
+                    setIsMaintenance(true);
+                }
+            })
+            .catch(err => console.error('Failed to check maintenance mode', err));
+    }, []);
+
     // Get statutes from the ACTIVE SESSION for progress bar
     const activeSession = useSurveyHistoryStore(
         useShallow((state) => state.surveys.find((s) => s.id === state.activeSurveyId))
@@ -52,7 +67,8 @@ export default function DashboardLayout({
     };
 
     return (
-        <div className="h-screen w-full flex flex-col bg-background text-foreground font-sans overflow-hidden">
+        <div className="h-screen w-full flex flex-col bg-background text-foreground font-sans overflow-hidden relative">
+            {isMaintenance && !pathname?.startsWith('/dashboard/admin') && <MaintenanceOverlay />}
             <ReportModal isOpen={isReportOpen} onClose={() => setIsReportOpen(false)} />
             <StatuteDetailPanel />
 
