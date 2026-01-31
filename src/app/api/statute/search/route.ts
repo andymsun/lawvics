@@ -314,7 +314,15 @@ async function scrapeStateStatute(
         'Sec-Fetch-User': '?1'
     };
 
-    if (scrapingApiKey && scrapingApiKey.length > 5) {
+    const genericProxyUrl = process.env.SCRAPING_PROXY_URL; // e.g. "http://api.scraperapi.com/?api_key=XXX&url="
+
+    if (genericProxyUrl) {
+        // Generic Proxy Support (ScraperAPI, ScrapingBee, etc.)
+        // The proxy URL should end with &url= or ?url= so we can append the target
+        targetUrl = `${genericProxyUrl}${encodeURIComponent(baseUrl)}`;
+        // Most proxies ignore headers unless passed specifically, but we keep them just in case
+        // Some proxies might require clearing standard headers, but usually it's fine.
+    } else if (scrapingApiKey && scrapingApiKey.length > 5) {
         // Assume ZenRows format for now as default, or simple proxy param
         // Example: https://api.zenrows.com/v1/?apikey=KEY&url=URL
         targetUrl = `https://api.zenrows.com/v1/?apikey=${scrapingApiKey}&url=${encodeURIComponent(baseUrl)}&js_render=true&premium_proxy=true`;
