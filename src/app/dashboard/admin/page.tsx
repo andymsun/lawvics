@@ -19,6 +19,7 @@ interface SystemConfig {
     // Operational Settings
     max_parallel_requests: number;
     rate_limit_per_hour: number;
+    disable_parallel: boolean;
     // Feature Flags
     maintenance_mode: boolean;
     enable_demo_mode: boolean;
@@ -82,6 +83,7 @@ export default function AdminPage() {
         allow_byok: true,
         max_parallel_requests: 10,
         rate_limit_per_hour: 0,
+        disable_parallel: false,
         maintenance_mode: false,
         enable_demo_mode: true,
     });
@@ -140,6 +142,7 @@ export default function AdminPage() {
                     allow_byok: data.data.allow_byok ?? prev.allow_byok,
                     max_parallel_requests: data.data.max_parallel_requests ?? prev.max_parallel_requests,
                     rate_limit_per_hour: data.data.rate_limit_per_hour ?? prev.rate_limit_per_hour,
+                    disable_parallel: data.data.disable_parallel ?? prev.disable_parallel,
                     maintenance_mode: data.data.maintenance_mode ?? prev.maintenance_mode,
                     enable_demo_mode: data.data.enable_demo_mode ?? prev.enable_demo_mode,
                 }));
@@ -596,6 +599,31 @@ export default function AdminPage() {
                             <p className="text-xs text-muted-foreground">
                                 Max API requests per user per hour. 0 = unlimited.
                             </p>
+                        </div>
+
+                        {/* Disable Parallelization */}
+                        <div className="flex items-center justify-between md:col-span-2 pt-4 border-t border-border/50">
+                            <div className="space-y-1">
+                                <label className="text-sm font-medium flex items-center gap-2">
+                                    Disable Parallel Swarm
+                                    {config.disable_parallel && (
+                                        <span className="px-2 py-0.5 bg-amber-500/10 text-amber-500 text-xs rounded-full">SLOW MODE</span>
+                                    )}
+                                </label>
+                                <p className="text-xs text-muted-foreground">
+                                    Force all searches to run sequentially (one by one). Drastically reduces server load and IP bans, but increases wait time (50 states ≈ 5 mins).
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setConfig({ ...config, disable_parallel: !config.disable_parallel })}
+                                className={`relative w-12 h-6 rounded-full transition-colors ${config.disable_parallel ? 'bg-amber-500' : 'bg-muted'
+                                    }`}
+                            >
+                                <span
+                                    className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${config.disable_parallel ? 'translate-x-7' : 'translate-x-1'
+                                        }`}
+                                />
+                            </button>
                         </div>
                     </div>
                 </div>

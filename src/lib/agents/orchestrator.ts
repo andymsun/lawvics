@@ -497,6 +497,22 @@ export class MaxConcurrentSurveysError extends Error {
     }
 }
 
+// Helper to fetch system config safely
+async function checkSystemConfig(): Promise<{ disable_parallel: boolean }> {
+    try {
+        const res = await fetch('/api/admin/config');
+        if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.data) {
+                return { disable_parallel: !!data.data.disable_parallel };
+            }
+        }
+    } catch {
+        // ignore errors
+    }
+    return { disable_parallel: false };
+}
+
 /**
  * Search all 50 states for statute data
  *
@@ -512,6 +528,13 @@ export async function searchAllStates(
     const settingsStore = useSettingsStore.getState();
     const { batchSize } = settingsStore;
 
+    // 0. Check admin config for parallelization override
+    const config = await checkSystemConfig();
+    const isParallelDisabled = config.disable_parallel;
+    if (isParallelDisabled) {
+        debug.log('Parallelization disabled by admin. Enforcing sequential processing.');
+    }
+
     // 1. Check concurrency limit
     const runningCount = surveyStore.surveys.filter(s => s.status === 'running').length;
     if (runningCount > MAX_CONCURRENT_SURVEYS) {
@@ -519,9 +542,9 @@ export async function searchAllStates(
     }
 
     // 2. Determine effective batch size
-    // For demo queries, force batch size 1 so states appear one by one with smooth animation
+    // For demo queries or disabled parallel, force batch size 1
     const isDemo = isDemoQuery(userQuery);
-    const effectiveBatchSize = isDemo ? 1 : batchSize;
+    const effectiveBatchSize = (isDemo || isParallelDisabled) ? 1 : batchSize;
 
     // 3. Chunk the 50 states according to effective batch size
     const chunks = chunkArray(ALL_STATE_CODES, effectiveBatchSize);
@@ -529,9 +552,9 @@ export async function searchAllStates(
     let totalSuccesses = 0;
     let totalErrors = 0;
 
-    // 4. Process chunks - PARALLEL for real queries, SEQUENTIAL for demo (animation)
-    if (isDemo) {
-        // Sequential processing for demo mode (pop one by one animation)
+    // 4. Process chunks - PARALLEL for real queries, SEQUENTIAL for demo/disabled
+    if (isDemo || isParallelDisabled) {
+        // Sequential processing for demo mode or admin-enforced slow mode
         for (const chunk of chunks) {
             const currentSurvey = useSurveyHistoryStore.getState().surveys.find(s => s.id === surveyId);
             if (currentSurvey?.status === 'cancelled') {
@@ -543,8 +566,8 @@ export async function searchAllStates(
             totalSuccesses += successes;
             totalErrors += errors;
 
-            // Randomized delay for demo animation (100-500ms)
-            const delay = Math.floor(Math.random() * 400) + 100;
+            // Randomized delay for demo animation (100-500ms), or fixed delay for slow mode
+            const delay = isDemo ? Math.floor(Math.random() * 400) + 100 : 500;
             await new Promise(resolve => setTimeout(resolve, delay));
         }
     } else {

@@ -42,6 +42,7 @@ const DEFAULT_CONFIG: Record<string, unknown> = {
     search_model: 'deepseek/deepseek-chat:free',
     document_model: 'mistralai/mistral-small-3.1-24b-instruct:free',
     provider: 'openrouter',
+    disable_parallel: false,
 };
 
 // ============================================================
