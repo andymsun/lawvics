@@ -454,40 +454,22 @@ async function processChunk(
     }
 
     // For LLM-based modes:
-    // If chunk has only 1 state, use individual fetch (enables scraping/proxy).
-    // If chunk has >1 state, use batch API (pure LLM generation, no scraping).
+    // Use PARALLEL individual calls for maximum speed (true swarm behavior)
     if (dataSource === 'llm-scraper' || dataSource === 'scraping-proxy' || dataSource === 'system-api') {
-        if (stateCodes.length === 1) {
-            // Single state -> Use scraping logic
-            const stateCode = stateCodes[0];
-            const result = await fetchStateStatute(stateCode, query, surveyId, useMockMode, openaiApiKey);
-            return result ? [1, 0] : [0, 1];
-        } else {
-            // Multiple states -> Use Batch LLM logic
-            try {
-                // Make ONE batch call for all states in chunk
-                const batchResults = await fetchBatchStatutes(stateCodes, query);
+        // Make parallel individual API calls for each state
+        // This enables true swarm behavior: all states in chunk start simultaneously
+        const promises = stateCodes.map((stateCode) =>
+            fetchStateStatute(stateCode, query, surveyId, useMockMode, openaiApiKey)
+        );
 
-                // Process results for each state
-                for (const stateCode of stateCodes) {
-                    const statute = batchResults[stateCode];
-                    if (statute) {
-                        surveyStore.setSessionStatute(surveyId, stateCode, statute);
-                        successes++;
-                    } else {
-                        surveyStore.setSessionError(surveyId, stateCode, new Error(`No result returned for ${stateCode}`));
-                        errors++;
-                    }
-                }
-            } catch (error) {
-                // Batch failed - mark all states as error
-                const errorObj = error instanceof Error ? error : new Error('Batch request failed');
-                for (const stateCode of stateCodes) {
-                    surveyStore.setSessionError(surveyId, stateCode, errorObj);
-                    errors++;
-                }
+        const results = await Promise.allSettled(promises);
+        results.forEach((result) => {
+            if (result.status === 'fulfilled' && result.value === true) {
+                successes++;
+            } else {
+                errors++;
             }
-        }
+        });
     } else {
         // Mock mode or official-api: use individual calls (existing behavior)
         const promises = stateCodes.map((stateCode) =>
@@ -519,6 +501,7 @@ export class MaxConcurrentSurveysError extends Error {
  * Search all 50 states for statute data
  *
  * Uses settings.batchSize to determine how many states to process in parallel/batch.
+ * For system-api mode, runs all chunks IN PARALLEL for maximum speed.
  */
 export async function searchAllStates(
     userQuery: string,
@@ -540,32 +523,65 @@ export async function searchAllStates(
     const isDemo = isDemoQuery(userQuery);
     const effectiveBatchSize = isDemo ? 1 : batchSize;
 
-    // 3. Process in chunks based on effective batch size
+    // 3. Chunk the 50 states according to effective batch size
+    const chunks = chunkArray(ALL_STATE_CODES, effectiveBatchSize);
+
     let totalSuccesses = 0;
     let totalErrors = 0;
 
-    // Chunk the 50 states according to effective batch size
-    const chunks = chunkArray(ALL_STATE_CODES, effectiveBatchSize);
+    // 4. Process chunks - PARALLEL for real queries, SEQUENTIAL for demo (animation)
+    if (isDemo) {
+        // Sequential processing for demo mode (pop one by one animation)
+        for (const chunk of chunks) {
+            const currentSurvey = useSurveyHistoryStore.getState().surveys.find(s => s.id === surveyId);
+            if (currentSurvey?.status === 'cancelled') {
+                console.log(`[Orchestrator] Survey #${surveyId} cancelled. Stopping.`);
+                return;
+            }
 
-    for (const chunk of chunks) {
-        const currentSurvey = useSurveyHistoryStore.getState().surveys.find(s => s.id === surveyId);
-        if (currentSurvey?.status === 'cancelled') {
-            console.log(`[Orchestrator] Survey #${surveyId} cancelled. Stopping.`);
-            return;
-        }
+            const [successes, errors] = await processChunk(chunk, userQuery, surveyId, useMockMode);
+            totalSuccesses += successes;
+            totalErrors += errors;
 
-        const [successes, errors] = await processChunk(chunk, userQuery, surveyId, useMockMode);
-        totalSuccesses += successes;
-        totalErrors += errors;
-
-        // Small delay between chunks to prevent overwhelming browser/network if batchSize is small
-        // For demo queries, use a randomized delay (100-500ms) to create natural/staggered "pop one by one" animation
-        // Average 300ms * 50 states = ~15 seconds total duration
-        if (chunks.length > 1) {
-            const delay = isDemo
-                ? Math.floor(Math.random() * 400) + 100 // 100ms to 500ms
-                : INTER_CHUNK_DELAY_MS;
+            // Randomized delay for demo animation (100-500ms)
+            const delay = Math.floor(Math.random() * 400) + 100;
             await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    } else {
+        // PARALLEL processing for all real queries (true swarm behavior!)
+        // All chunks start simultaneously, results come back as they complete
+        debug.log(`[Swarm] Starting parallel processing of ${chunks.length} chunks (${effectiveBatchSize} states each)`);
+        debug.time('swarm-total');
+
+        const chunkPromises = chunks.map(async (chunk, idx) => {
+            // Check for cancellation before starting each chunk
+            const currentSurvey = useSurveyHistoryStore.getState().surveys.find(s => s.id === surveyId);
+            if (currentSurvey?.status === 'cancelled') {
+                return [0, 0] as [number, number];
+            }
+
+            debug.log(`[Swarm] Chunk ${idx + 1}/${chunks.length} starting: ${chunk.join(', ')}`);
+            const result = await processChunk(chunk, userQuery, surveyId, useMockMode);
+            debug.log(`[Swarm] Chunk ${idx + 1}/${chunks.length} complete: ${result[0]} successes, ${result[1]} errors`);
+            return result;
+        });
+
+        // Wait for ALL chunks to complete in parallel
+        const results = await Promise.allSettled(chunkPromises);
+
+        debug.timeEnd('swarm-total');
+
+        // Aggregate results
+        for (const result of results) {
+            if (result.status === 'fulfilled') {
+                const [successes, errors] = result.value;
+                totalSuccesses += successes;
+                totalErrors += errors;
+            } else {
+                // Chunk failed entirely
+                debug.error('[Swarm] Chunk failed:', result.reason);
+                totalErrors += effectiveBatchSize; // Assume all states in chunk failed
+            }
         }
     }
 

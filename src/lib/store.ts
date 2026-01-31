@@ -501,7 +501,7 @@ const DEFAULT_SETTINGS: SettingsState = {
     openaiModel: 'gpt-4o-mini',
     geminiModel: 'gemini-1.5-flash',
     openRouterModel: 'openai/gpt-4o-mini',
-    batchSize: 10,
+    batchSize: 50, // Full parallelism: all 50 states at once
 };
 
 /**
