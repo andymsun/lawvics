@@ -14,12 +14,13 @@ interface SystemConfig {
     document_model: string;
     provider: 'openai' | 'gemini' | 'openrouter';
     // Access Control
-    force_system_api: boolean;
+    forced_mode: 'none' | 'system-api' | 'llm-scraper' | 'official-api' | 'mock';
     allow_byok: boolean;
     // Operational Settings
     max_parallel_requests: number;
     rate_limit_per_hour: number;
     disable_parallel: boolean;
+    enable_proxy: boolean;
     // Feature Flags
     maintenance_mode: boolean;
     enable_demo_mode: boolean;
@@ -79,11 +80,12 @@ export default function AdminPage() {
         search_model: 'deepseek/deepseek-chat:free',
         document_model: 'mistralai/mistral-small-3.1-24b-instruct:free',
         provider: 'openrouter',
-        force_system_api: false,
+        forced_mode: 'none',
         allow_byok: true,
         max_parallel_requests: 10,
         rate_limit_per_hour: 0,
         disable_parallel: false,
+        enable_proxy: true,
         maintenance_mode: false,
         enable_demo_mode: true,
     });
@@ -138,11 +140,12 @@ export default function AdminPage() {
                     search_model: data.data.search_model ?? prev.search_model,
                     document_model: data.data.document_model ?? prev.document_model,
                     provider: data.data.provider ?? prev.provider,
-                    force_system_api: data.data.force_system_api ?? prev.force_system_api,
+                    forced_mode: data.data.forced_mode ?? (data.data.force_system_api ? 'system-api' : 'none'), // Backwards compat
                     allow_byok: data.data.allow_byok ?? prev.allow_byok,
                     max_parallel_requests: data.data.max_parallel_requests ?? prev.max_parallel_requests,
                     rate_limit_per_hour: data.data.rate_limit_per_hour ?? prev.rate_limit_per_hour,
                     disable_parallel: data.data.disable_parallel ?? prev.disable_parallel,
+                    enable_proxy: data.data.enable_proxy ?? prev.enable_proxy,
                     maintenance_mode: data.data.maintenance_mode ?? prev.maintenance_mode,
                     enable_demo_mode: data.data.enable_demo_mode ?? prev.enable_demo_mode,
                 }));
@@ -515,24 +518,27 @@ export default function AdminPage() {
                         </div>
                     </div>
                     <div className="space-y-6">
-                        {/* Force System API */}
+                        {/* Forced Mode */}
                         <div className="flex items-center justify-between">
                             <div className="space-y-1">
-                                <label className="text-sm font-medium">Force System API Only</label>
+                                <label className="text-sm font-medium">Forced User Mode</label>
                                 <p className="text-xs text-muted-foreground">
-                                    When enabled, users cannot use their own API keys. All requests use system API.
+                                    Lock all users into a specific data source. 'None' lets users choose.
                                 </p>
                             </div>
-                            <button
-                                onClick={() => setConfig({ ...config, force_system_api: !config.force_system_api })}
-                                className={`relative w-12 h-6 rounded-full transition-colors ${config.force_system_api ? 'bg-red-500' : 'bg-muted'
-                                    }`}
-                            >
-                                <span
-                                    className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${config.force_system_api ? 'translate-x-7' : 'translate-x-1'
-                                        }`}
-                                />
-                            </button>
+                            <div className="relative">
+                                <select
+                                    value={config.forced_mode}
+                                    onChange={(e) => setConfig({ ...config, forced_mode: e.target.value as any })}
+                                    className="block w-48 px-3 py-2 bg-muted border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary appearance-none"
+                                >
+                                    <option value="none">None (User Choice)</option>
+                                    <option value="system-api">System API (Managed)</option>
+                                    <option value="llm-scraper">LLM Scraper (BYOK)</option>
+                                    <option value="official-api">Official State API</option>
+                                    <option value="mock">Mock Mode (Dev)</option>
+                                </select>
+                            </div>
                         </div>
 
                         {/* Allow BYOK */}
@@ -540,17 +546,17 @@ export default function AdminPage() {
                             <div className="space-y-1">
                                 <label className="text-sm font-medium">Allow Bring Your Own Key</label>
                                 <p className="text-xs text-muted-foreground">
-                                    Allow users to add their own API keys in Settings (ignored if Force System API is on).
+                                    Allow users to add their own API keys in Settings (ignored if System API is forced).
                                 </p>
                             </div>
                             <button
                                 onClick={() => setConfig({ ...config, allow_byok: !config.allow_byok })}
-                                disabled={config.force_system_api}
-                                className={`relative w-12 h-6 rounded-full transition-colors disabled:opacity-50 ${config.allow_byok && !config.force_system_api ? 'bg-green-500' : 'bg-muted'
+                                disabled={config.forced_mode === 'system-api'}
+                                className={`relative w-12 h-6 rounded-full transition-colors disabled:opacity-50 ${config.allow_byok && config.forced_mode !== 'system-api' ? 'bg-green-500' : 'bg-muted'
                                     }`}
                             >
                                 <span
-                                    className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${config.allow_byok && !config.force_system_api ? 'translate-x-7' : 'translate-x-1'
+                                    className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${config.allow_byok && config.forced_mode !== 'system-api' ? 'translate-x-7' : 'translate-x-1'
                                         }`}
                                 />
                             </button>
@@ -621,6 +627,29 @@ export default function AdminPage() {
                             >
                                 <span
                                     className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${config.disable_parallel ? 'translate-x-7' : 'translate-x-1'
+                                        }`}
+                                />
+                            </button>
+                        </div>
+
+                        {/* Enable Scraping Proxy */}
+                        <div className="flex items-center justify-between md:col-span-2 pt-4 border-t border-border/50">
+                            <div className="space-y-1">
+                                <label className="text-sm font-medium flex items-center gap-2">
+                                    Enable Scraping Proxy
+                                    <span className="px-2 py-0.5 bg-blue-500/10 text-blue-500 text-xs rounded-full">RECOMMENDED</span>
+                                </label>
+                                <p className="text-xs text-muted-foreground">
+                                    Use the configured proxy service (SCRAPING_PROXY_URL) to bypass WAFs. If OFF, proxy is ignored.
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setConfig({ ...config, enable_proxy: !config.enable_proxy })}
+                                className={`relative w-12 h-6 rounded-full transition-colors ${config.enable_proxy ? 'bg-blue-500' : 'bg-muted'
+                                    }`}
+                            >
+                                <span
+                                    className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${config.enable_proxy ? 'translate-x-7' : 'translate-x-1'
                                         }`}
                                 />
                             </button>

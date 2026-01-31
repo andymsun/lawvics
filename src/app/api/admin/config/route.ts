@@ -43,6 +43,8 @@ const DEFAULT_CONFIG: Record<string, unknown> = {
     document_model: 'mistralai/mistral-small-3.1-24b-instruct:free',
     provider: 'openrouter',
     disable_parallel: false,
+    forced_mode: 'none', // none, system-api, llm-scraper, official-api, mock
+    enable_proxy: true,
 };
 
 // ============================================================

@@ -257,7 +257,7 @@ interface DataSourceOption {
     description: string;
 }
 
-const DataSourceSelector = () => {
+const DataSourceSelector = ({ adminConfig }: { adminConfig: AdminConfig }) => {
     const { dataSource, setDataSource } = useSettingsStore();
 
     const sources: DataSourceOption[] = [
@@ -299,13 +299,15 @@ const DataSourceSelector = () => {
                 {sources.map((source) => (
                     <div
                         key={source.id}
-                        onClick={() => setDataSource(source.id)}
+                        onClick={() => adminConfig.forced_mode === 'none' && setDataSource(source.id)}
                         className={`
                             cursor-pointer p-4 rounded-xl border-2 transition-all duration-200
                             flex flex-col gap-3
                             ${dataSource === source.id
                                 ? 'border-primary bg-primary/5 shadow-lg scale-[1.02]'
-                                : 'border-border bg-card hover:border-muted-foreground/50 hover:bg-muted/30'
+                                : adminConfig.forced_mode !== 'none'
+                                    ? 'border-border bg-card opacity-50 grayscale cursor-not-allowed'
+                                    : 'border-border bg-card hover:border-muted-foreground/50 hover:bg-muted/30'
                             }
                         `}
                     >
@@ -612,7 +614,7 @@ const ModelSelector = ({ settings, testOpenAIKey, testGeminiKey, testOpenRouterK
 type TabType = 'datasource' | 'preferences' | 'system';
 
 interface AdminConfig {
-    force_system_api: boolean;
+    forced_mode: 'none' | 'system-api' | 'llm-scraper' | 'official-api' | 'mock';
     allow_byok: boolean;
     maintenance_mode: boolean;
     disable_parallel: boolean;
@@ -622,7 +624,7 @@ export default function SettingsPage() {
     const settings = useSettingsStore();
     const { theme, setTheme } = useTheme();
     const [activeTab, setActiveTab] = useState<TabType>('datasource');
-    const [adminConfig, setAdminConfig] = useState<AdminConfig>({ force_system_api: false, allow_byok: true, maintenance_mode: false, disable_parallel: false });
+    const [adminConfig, setAdminConfig] = useState<AdminConfig>({ forced_mode: 'none', allow_byok: true, maintenance_mode: false, disable_parallel: false });
 
     // Fetch admin config on mount to check restrictions
     React.useEffect(() => {
@@ -632,13 +634,16 @@ export default function SettingsPage() {
                 const data = await res.json();
                 if (data.success && data.data) {
                     setAdminConfig({
-                        force_system_api: data.data.force_system_api ?? false,
+                        forced_mode: data.data.forced_mode ?? (data.data.force_system_api ? 'system-api' : 'none'),
                         allow_byok: data.data.allow_byok ?? true,
                         maintenance_mode: data.data.maintenance_mode ?? false,
                         disable_parallel: data.data.disable_parallel ?? false,
                     });
-                    // If force_system_api is on, switch to system-api data source
-                    if (data.data.force_system_api) {
+                    // If forced_mode is set, switch to that data source
+                    if (data.data.forced_mode && data.data.forced_mode !== 'none') {
+                        settings.setDataSource(data.data.forced_mode);
+                    } else if (data.data.force_system_api) {
+                        // Backwards compatibility
                         settings.setDataSource('system-api');
                     }
                 }
@@ -794,16 +799,16 @@ export default function SettingsPage() {
                                 </div>
 
                                 {/* Admin Lock Banner */}
-                                {adminConfig.force_system_api && (
+                                {adminConfig.forced_mode !== 'none' && (
                                     <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 flex items-start gap-3">
                                         <Lock className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
                                         <div>
                                             <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
-                                                System API Only Mode
+                                                Mode Locked by Admin
                                             </p>
                                             <p className="text-xs text-muted-foreground mt-1">
-                                                Your administrator has restricted this instance to use the system API only.
-                                                Personal API keys are disabled.
+                                                Your administrator has forced the data source to: <span className="font-mono font-semibold">{adminConfig.forced_mode}</span>.
+                                                Personal API keys and other sources are disabled.
                                             </p>
                                         </div>
                                     </div>
@@ -824,7 +829,7 @@ export default function SettingsPage() {
                                     </div>
                                 )}
 
-                                <DataSourceSelector />
+                                <DataSourceSelector adminConfig={adminConfig} />
 
                                 {/* API Keys based on Data Source */}
                                 {settings.dataSource === 'llm-scraper' && (
@@ -986,7 +991,7 @@ export default function SettingsPage() {
                                 ))}
 
                                 {/* Batch Size Configuration - Hidden if Paralellization Disabled or System API Forced */}
-                                {!adminConfig.disable_parallel && !adminConfig.force_system_api && (
+                                {!adminConfig.disable_parallel && adminConfig.forced_mode !== 'system-api' && (
                                     <div className="space-y-4 pt-6 border-t border-border">
                                         <div className="flex items-center justify-between">
                                             <div>

@@ -314,9 +314,18 @@ async function scrapeStateStatute(
         'Sec-Fetch-User': '?1'
     };
 
+    // Check Admin Config for Proxy Toggle
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+    const { data: configData } = await supabase.from('system_config').select('key, value');
+    const proxyConfig = configData?.find(r => r.key === 'enable_proxy');
+    let enableProxy = true;
+    if (proxyConfig?.value) {
+        try { enableProxy = JSON.parse(proxyConfig.value); } catch { /* default true */ }
+    }
+
     const genericProxyUrl = process.env.SCRAPING_PROXY_URL; // e.g. "http://api.scraperapi.com/?api_key=XXX&url="
 
-    if (genericProxyUrl) {
+    if (genericProxyUrl && enableProxy) {
         // Generic Proxy Support (ScraperAPI, ScrapingBee, etc.)
         // The proxy URL should end with &url= or ?url= so we can append the target
         targetUrl = `${genericProxyUrl}${encodeURIComponent(baseUrl)}`;
