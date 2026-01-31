@@ -137,9 +137,19 @@ QUALITY REQUIREMENTS:
 - Identify outliers by name (CA, TX, NY, etc.)
 - Generate realistic analysis based on the topic and available data
 
-Generate the COMPLETE document now with ALL 50 states explicitly listed:`;
+LENGTH REQUIREMENTS - THIS IS CRITICAL:
+- The expected output is a COMPREHENSIVE 40-100+ page professional legal document
+- Do NOT be "stingy" with output - be thorough and complete
+- Each state entry should have detailed analysis, not just a one-liner
+- Include full statutory text excerpts where available
+- The comparison tables should list ALL 50 states individually
+- Detailed state-by-state narratives are expected for complex topics
+- This is a professional legal research document, NOT a summary
+
+Generate the COMPLETE document now with ALL 50 states explicitly listed. Take your time and be thorough:`;
 
         // Use streaming for progressive display
+        // Note: We don't set maxTokens to allow models to output their maximum
         const result = streamText({
             model: aiModel,
             system: SURVEY_DOCUMENT_SYSTEM_PROMPT,

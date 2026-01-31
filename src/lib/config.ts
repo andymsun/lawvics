@@ -15,15 +15,34 @@ export const SYSTEM_CONFIG = {
 // ============================================================
 
 export interface SystemConfig {
+    // AI Model Settings
     search_model: string;
     document_model: string;
     provider: 'openai' | 'gemini' | 'openrouter';
+
+    // Access Control
+    force_system_api: boolean;      // Lock users to system API only (no BYOK)
+    allow_byok: boolean;            // Allow users to bring their own API keys
+
+    // Operational Settings
+    max_parallel_requests: number;  // Max concurrent requests per survey (1-50)
+    rate_limit_per_hour: number;    // Max requests per user per hour (0 = unlimited)
+
+    // Feature Flags
+    maintenance_mode: boolean;      // Disable all API calls when true
+    enable_demo_mode: boolean;      // Allow demo/mock data mode
 }
 
 const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
     search_model: 'deepseek/deepseek-chat:free',
     document_model: 'mistralai/mistral-small-3.1-24b-instruct:free',
     provider: 'openrouter',
+    force_system_api: false,
+    allow_byok: true,
+    max_parallel_requests: 10,
+    rate_limit_per_hour: 0,
+    maintenance_mode: false,
+    enable_demo_mode: true,
 };
 
 // ============================================================

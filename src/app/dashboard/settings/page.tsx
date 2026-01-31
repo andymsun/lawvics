@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, Zap, AlertTriangle, Key, Eye, EyeOff, Database, Bot, Globe, Monitor, Moon, Sun, Layout, Sliders, ExternalLink, Check, Loader2, X, Cloud } from 'lucide-react';
+import { Settings, Zap, AlertTriangle, Key, Eye, EyeOff, Database, Bot, Globe, Monitor, Moon, Sun, Layout, Sliders, ExternalLink, Check, Loader2, X, Cloud, Lock } from 'lucide-react';
 import { useSettingsStore, DataSource, SettingsStore } from '@/lib/store';
 import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
@@ -611,10 +611,41 @@ const ModelSelector = ({ settings, testOpenAIKey, testGeminiKey, testOpenRouterK
 
 type TabType = 'datasource' | 'preferences' | 'system';
 
+interface AdminConfig {
+    force_system_api: boolean;
+    allow_byok: boolean;
+    maintenance_mode: boolean;
+}
+
 export default function SettingsPage() {
     const settings = useSettingsStore();
     const { theme, setTheme } = useTheme();
     const [activeTab, setActiveTab] = useState<TabType>('datasource');
+    const [adminConfig, setAdminConfig] = useState<AdminConfig>({ force_system_api: false, allow_byok: true, maintenance_mode: false });
+
+    // Fetch admin config on mount to check restrictions
+    React.useEffect(() => {
+        const fetchAdminConfig = async () => {
+            try {
+                const res = await fetch('/api/admin/config');
+                const data = await res.json();
+                if (data.success && data.data) {
+                    setAdminConfig({
+                        force_system_api: data.data.force_system_api ?? false,
+                        allow_byok: data.data.allow_byok ?? true,
+                        maintenance_mode: data.data.maintenance_mode ?? false,
+                    });
+                    // If force_system_api is on, switch to system-api data source
+                    if (data.data.force_system_api) {
+                        settings.setDataSource('system-api');
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to fetch admin config:', error);
+            }
+        };
+        fetchAdminConfig();
+    }, [settings]);
 
     const tabs: { id: TabType; label: string; icon: React.ElementType }[] = [
         { id: 'datasource', label: 'Data Source', icon: Database },
@@ -759,6 +790,38 @@ export default function SettingsPage() {
                                         Choose where Lawvics fetches legal data from.
                                     </p>
                                 </div>
+
+                                {/* Admin Lock Banner */}
+                                {adminConfig.force_system_api && (
+                                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 flex items-start gap-3">
+                                        <Lock className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                                        <div>
+                                            <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                                                System API Only Mode
+                                            </p>
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                Your administrator has restricted this instance to use the system API only.
+                                                Personal API keys are disabled.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Maintenance Mode Banner */}
+                                {adminConfig.maintenance_mode && (
+                                    <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-start gap-3">
+                                        <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                                        <div>
+                                            <p className="text-sm font-medium text-red-600 dark:text-red-400">
+                                                Maintenance Mode Active
+                                            </p>
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                The system is currently undergoing maintenance. API requests are temporarily disabled.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+
                                 <DataSourceSelector />
 
                                 {/* API Keys based on Data Source */}

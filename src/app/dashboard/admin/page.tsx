@@ -13,18 +13,32 @@ interface SystemConfig {
     search_model: string;
     document_model: string;
     provider: 'openai' | 'gemini' | 'openrouter';
+    // Access Control
+    force_system_api: boolean;
+    allow_byok: boolean;
+    // Operational Settings
+    max_parallel_requests: number;
+    rate_limit_per_hour: number;
+    // Feature Flags
+    maintenance_mode: boolean;
+    enable_demo_mode: boolean;
 }
 
-// ============================================================
-// Recommended Free Models
-// ============================================================
+interface ModelInfo {
+    value: string;
+    label: string;
+    description: string;
+    contextLength: number;
+    maxOutput: number;
+}
 
-const RECOMMENDED_MODELS = [
-    { value: 'deepseek/deepseek-chat:free', label: 'DeepSeek Chat (Best free, GPT-4 level)' },
-    { value: 'mistralai/mistral-small-3.1-24b-instruct:free', label: 'Mistral Small 3.1 (128K context, great for docs)' },
-    { value: 'google/gemini-2.0-flash-exp:free', label: 'Gemini 2.0 Flash (Fast, 1M context)' },
-    { value: 'qwen/qwen-2.5-72b-instruct:free', label: 'Qwen 2.5 72B (Great structured output)' },
-    { value: 'meta-llama/llama-3.3-70b-instruct:free', label: 'Llama 3.3 70B (Reliable fallback)' },
+// Fallback models if API fails
+const FALLBACK_MODELS: ModelInfo[] = [
+    { value: 'deepseek/deepseek-chat:free', label: 'DeepSeek Chat (64K context)', description: 'GPT-4 level performance, great for reasoning', contextLength: 64000, maxOutput: 8192 },
+    { value: 'mistralai/mistral-small-3.1-24b-instruct:free', label: 'Mistral Small 3.1 (128K context)', description: 'Excellent for long documents and surveys', contextLength: 128000, maxOutput: 8192 },
+    { value: 'google/gemini-2.0-flash-exp:free', label: 'Gemini 2.0 Flash (1M context)', description: 'Very fast, massive context window', contextLength: 1000000, maxOutput: 8192 },
+    { value: 'qwen/qwen-2.5-72b-instruct:free', label: 'Qwen 2.5 72B (32K context)', description: 'Great for structured output and analysis', contextLength: 32000, maxOutput: 8192 },
+    { value: 'meta-llama/llama-3.3-70b-instruct:free', label: 'Llama 3.3 70B (128K context)', description: 'Reliable general-purpose model', contextLength: 128000, maxOutput: 8192 },
 ];
 
 // ============================================================
@@ -38,16 +52,50 @@ export default function AdminPage() {
     const [isSaving, setIsSaving] = useState(false);
     const [testingModel, setTestingModel] = useState<'search' | 'document' | null>(null);
     const [testResults, setTestResults] = useState<{ search?: { success: boolean; latency?: number; error?: string }; document?: { success: boolean; latency?: number; error?: string } }>({});
+    const [availableModels, setAvailableModels] = useState<ModelInfo[]>(FALLBACK_MODELS);
+    const [isLoadingModels, setIsLoadingModels] = useState(false);
+    const [selectedModelInfo, setSelectedModelInfo] = useState<{ search?: ModelInfo; document?: ModelInfo }>({});
     const [config, setConfig] = useState<SystemConfig>({
         search_model: 'deepseek/deepseek-chat:free',
         document_model: 'mistralai/mistral-small-3.1-24b-instruct:free',
         provider: 'openrouter',
+        force_system_api: false,
+        allow_byok: true,
+        max_parallel_requests: 10,
+        rate_limit_per_hour: 0,
+        maintenance_mode: false,
+        enable_demo_mode: true,
     });
 
-    // Fetch current config on mount
+    // Fetch current config and available models on mount
     useEffect(() => {
         fetchConfig();
+        fetchAvailableModels();
     }, []);
+
+    // Update selected model info when config or models change
+    useEffect(() => {
+        const searchModel = availableModels.find(m => m.value === config.search_model);
+        const documentModel = availableModels.find(m => m.value === config.document_model);
+        setSelectedModelInfo({ search: searchModel, document: documentModel });
+    }, [config, availableModels]);
+
+    const fetchAvailableModels = async () => {
+        setIsLoadingModels(true);
+        try {
+            const res = await fetch('/api/admin/models');
+            const data = await res.json();
+            if (data.success && data.models?.length > 0) {
+                setAvailableModels(data.models);
+                toast.success(`Loaded ${data.models.length} free models from OpenRouter`);
+            }
+        } catch (error) {
+            console.error('Failed to fetch models:', error);
+            toast.error('Using fallback model list');
+        } finally {
+            setIsLoadingModels(false);
+        }
+    };
 
     const fetchConfig = async () => {
         setIsLoading(true);
@@ -55,11 +103,18 @@ export default function AdminPage() {
             const res = await fetch('/api/admin/config');
             const data = await res.json();
             if (data.success && data.data) {
-                setConfig({
-                    search_model: data.data.search_model || config.search_model,
-                    document_model: data.data.document_model || config.document_model,
-                    provider: data.data.provider || config.provider,
-                });
+                setConfig(prev => ({
+                    ...prev,
+                    search_model: data.data.search_model ?? prev.search_model,
+                    document_model: data.data.document_model ?? prev.document_model,
+                    provider: data.data.provider ?? prev.provider,
+                    force_system_api: data.data.force_system_api ?? prev.force_system_api,
+                    allow_byok: data.data.allow_byok ?? prev.allow_byok,
+                    max_parallel_requests: data.data.max_parallel_requests ?? prev.max_parallel_requests,
+                    rate_limit_per_hour: data.data.rate_limit_per_hour ?? prev.rate_limit_per_hour,
+                    maintenance_mode: data.data.maintenance_mode ?? prev.maintenance_mode,
+                    enable_demo_mode: data.data.enable_demo_mode ?? prev.enable_demo_mode,
+                }));
             }
         } catch (error) {
             console.error('Failed to fetch config:', error);
@@ -269,6 +324,7 @@ export default function AdminPage() {
                             <label className="text-sm font-medium flex items-center gap-2">
                                 <Cpu className="w-4 h-4 text-muted-foreground" />
                                 Search Model (Speed + Citations)
+                                {isLoadingModels && <Loader2 className="w-3 h-3 animate-spin" />}
                             </label>
                             <div className="flex gap-2">
                                 <select
@@ -276,7 +332,7 @@ export default function AdminPage() {
                                     onChange={(e) => setConfig({ ...config, search_model: e.target.value })}
                                     className="flex-1 px-3 py-2 bg-muted border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                                 >
-                                    {RECOMMENDED_MODELS.map((model) => (
+                                    {availableModels.map((model: ModelInfo) => (
                                         <option key={model.value} value={model.value}>
                                             {model.label}
                                         </option>
@@ -300,6 +356,15 @@ export default function AdminPage() {
                                     Test
                                 </button>
                             </div>
+                            {selectedModelInfo.search && (
+                                <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded-md">
+                                    <p>{selectedModelInfo.search.description}</p>
+                                    <p className="mt-1 font-medium">
+                                        Context: {Math.round(selectedModelInfo.search.contextLength / 1000)}K tokens |
+                                        Max output: {Math.round(selectedModelInfo.search.maxOutput / 1000)}K tokens
+                                    </p>
+                                </div>
+                            )}
                             <div className="flex items-center gap-2">
                                 <p className="text-xs text-muted-foreground flex-1">
                                     Used for 50-state surveys and individual searches.
@@ -325,7 +390,7 @@ export default function AdminPage() {
                                     onChange={(e) => setConfig({ ...config, document_model: e.target.value })}
                                     className="flex-1 px-3 py-2 bg-muted border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                                 >
-                                    {RECOMMENDED_MODELS.map((model) => (
+                                    {availableModels.map((model: ModelInfo) => (
                                         <option key={model.value} value={model.value}>
                                             {model.label}
                                         </option>
@@ -349,9 +414,18 @@ export default function AdminPage() {
                                     Test
                                 </button>
                             </div>
+                            {selectedModelInfo.document && (
+                                <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded-md">
+                                    <p>{selectedModelInfo.document.description}</p>
+                                    <p className="mt-1 font-medium">
+                                        Context: {Math.round(selectedModelInfo.document.contextLength / 1000)}K tokens |
+                                        Max output: {Math.round(selectedModelInfo.document.maxOutput / 1000)}K tokens
+                                    </p>
+                                </div>
+                            )}
                             <div className="flex items-center gap-2">
                                 <p className="text-xs text-muted-foreground flex-1">
-                                    Used for executive summaries and professional survey documents.
+                                    Used for executive summaries and professional survey documents (40-100+ pages).
                                 </p>
                                 {testResults.document?.latency && (
                                     <span className="text-xs text-green-500">✓ {testResults.document.latency}ms</span>
@@ -360,6 +434,165 @@ export default function AdminPage() {
                                     <span className="text-xs text-red-500 truncate max-w-[200px]">{testResults.document.error}</span>
                                 )}
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Access Control Section */}
+                <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="p-2 bg-red-500/10 rounded-lg">
+                            <Lock className="w-5 h-5 text-red-500" />
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-semibold">Access Control</h2>
+                            <p className="text-sm text-muted-foreground">Control user access to API features</p>
+                        </div>
+                    </div>
+                    <div className="space-y-6">
+                        {/* Force System API */}
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-1">
+                                <label className="text-sm font-medium">Force System API Only</label>
+                                <p className="text-xs text-muted-foreground">
+                                    When enabled, users cannot use their own API keys. All requests use system API.
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setConfig({ ...config, force_system_api: !config.force_system_api })}
+                                className={`relative w-12 h-6 rounded-full transition-colors ${config.force_system_api ? 'bg-red-500' : 'bg-muted'
+                                    }`}
+                            >
+                                <span
+                                    className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${config.force_system_api ? 'translate-x-7' : 'translate-x-1'
+                                        }`}
+                                />
+                            </button>
+                        </div>
+
+                        {/* Allow BYOK */}
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-1">
+                                <label className="text-sm font-medium">Allow Bring Your Own Key</label>
+                                <p className="text-xs text-muted-foreground">
+                                    Allow users to add their own API keys in Settings (ignored if Force System API is on).
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setConfig({ ...config, allow_byok: !config.allow_byok })}
+                                disabled={config.force_system_api}
+                                className={`relative w-12 h-6 rounded-full transition-colors disabled:opacity-50 ${config.allow_byok && !config.force_system_api ? 'bg-green-500' : 'bg-muted'
+                                    }`}
+                            >
+                                <span
+                                    className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${config.allow_byok && !config.force_system_api ? 'translate-x-7' : 'translate-x-1'
+                                        }`}
+                                />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Operational Settings Section */}
+                <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="p-2 bg-blue-500/10 rounded-lg">
+                            <RefreshCw className="w-5 h-5 text-blue-500" />
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-semibold">Operational Settings</h2>
+                            <p className="text-sm text-muted-foreground">Configure performance and limits</p>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Max Parallel Requests */}
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Max Parallel Requests</label>
+                            <input
+                                type="number"
+                                min={1}
+                                max={50}
+                                value={config.max_parallel_requests}
+                                onChange={(e) => setConfig({ ...config, max_parallel_requests: Math.min(50, Math.max(1, parseInt(e.target.value) || 10)) })}
+                                className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                How many state searches run at once (1-50). Lower = slower but more reliable.
+                            </p>
+                        </div>
+
+                        {/* Rate Limit */}
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Rate Limit (per hour)</label>
+                            <input
+                                type="number"
+                                min={0}
+                                value={config.rate_limit_per_hour}
+                                onChange={(e) => setConfig({ ...config, rate_limit_per_hour: Math.max(0, parseInt(e.target.value) || 0) })}
+                                className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Max API requests per user per hour. 0 = unlimited.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Feature Flags Section */}
+                <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="p-2 bg-orange-500/10 rounded-lg">
+                            <Zap className="w-5 h-5 text-orange-500" />
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-semibold">Feature Flags</h2>
+                            <p className="text-sm text-muted-foreground">Toggle features on or off</p>
+                        </div>
+                    </div>
+                    <div className="space-y-6">
+                        {/* Maintenance Mode */}
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-1">
+                                <label className="text-sm font-medium flex items-center gap-2">
+                                    Maintenance Mode
+                                    {config.maintenance_mode && (
+                                        <span className="px-2 py-0.5 bg-red-500/10 text-red-500 text-xs rounded-full">ACTIVE</span>
+                                    )}
+                                </label>
+                                <p className="text-xs text-muted-foreground">
+                                    Disable all API calls. Shows maintenance message to users.
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setConfig({ ...config, maintenance_mode: !config.maintenance_mode })}
+                                className={`relative w-12 h-6 rounded-full transition-colors ${config.maintenance_mode ? 'bg-red-500' : 'bg-muted'
+                                    }`}
+                            >
+                                <span
+                                    className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${config.maintenance_mode ? 'translate-x-7' : 'translate-x-1'
+                                        }`}
+                                />
+                            </button>
+                        </div>
+
+                        {/* Enable Demo Mode */}
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-1">
+                                <label className="text-sm font-medium">Enable Demo Mode</label>
+                                <p className="text-xs text-muted-foreground">
+                                    Allow demo queries with hardcoded responses (no API costs).
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setConfig({ ...config, enable_demo_mode: !config.enable_demo_mode })}
+                                className={`relative w-12 h-6 rounded-full transition-colors ${config.enable_demo_mode ? 'bg-green-500' : 'bg-muted'
+                                    }`}
+                            >
+                                <span
+                                    className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${config.enable_demo_mode ? 'translate-x-7' : 'translate-x-1'
+                                        }`}
+                                />
+                            </button>
                         </div>
                     </div>
                 </div>
