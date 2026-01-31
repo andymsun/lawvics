@@ -1195,9 +1195,32 @@ export default function BriefView() {
 
                                 {/* Streaming/Loading state */}
                                 {isGeneratingFullSurvey && (
-                                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                        Generating professional survey document... This may take 30-60 seconds.
+                                    <div className="mb-4 p-4 rounded-lg bg-primary/5 border border-primary/20">
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <div className="relative">
+                                                <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                                                <div className="absolute inset-0 w-5 h-5 rounded-full border-2 border-primary/20 animate-ping" />
+                                            </div>
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-medium text-foreground">Generating Professional Survey</span>
+                                                    <span className="text-xs text-muted-foreground animate-pulse">
+                                                        {fullSurveyStreamContent ? `${(fullSurveyStreamContent.length / 1000).toFixed(1)}k chars` : 'Connecting to AI...'}
+                                                    </span>
+                                                </div>
+                                                <p className="text-sm text-muted-foreground mt-1">
+                                                    {fullSurveyStreamContent
+                                                        ? 'Streaming response... Content will appear below as it generates.'
+                                                        : 'This may take 30-60 seconds. Please wait while the AI analyzes all 50 states...'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        {/* Progress bar simulation */}
+                                        <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                                            <div className="h-full bg-primary/60 rounded-full animate-pulse"
+                                                style={{ width: fullSurveyStreamContent ? `${Math.min(95, fullSurveyStreamContent.length / 100)}%` : '15%' }}
+                                            />
+                                        </div>
                                     </div>
                                 )}
 

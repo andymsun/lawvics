@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Shield, Save, Loader2, Check, X, Key, Lock, Cpu, FileText, RefreshCw } from 'lucide-react';
+import { Shield, Save, Loader2, Check, X, Key, Lock, Cpu, FileText, RefreshCw, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 
 // ============================================================
@@ -36,6 +36,8 @@ export default function AdminPage() {
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [testingModel, setTestingModel] = useState<'search' | 'document' | null>(null);
+    const [testResults, setTestResults] = useState<{ search?: { success: boolean; latency?: number; error?: string }; document?: { success: boolean; latency?: number; error?: string } }>({});
     const [config, setConfig] = useState<SystemConfig>({
         search_model: 'deepseek/deepseek-chat:free',
         document_model: 'mistralai/mistral-small-3.1-24b-instruct:free',
@@ -63,6 +65,42 @@ export default function AdminPage() {
             console.error('Failed to fetch config:', error);
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const testModel = async (type: 'search' | 'document') => {
+        const model = type === 'search' ? config.search_model : config.document_model;
+        setTestingModel(type);
+        setTestResults(prev => ({ ...prev, [type]: undefined }));
+
+        try {
+            const res = await fetch('/api/admin/test-model', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model, password }),
+            });
+            const data = await res.json();
+
+            setTestResults(prev => ({
+                ...prev,
+                [type]: {
+                    success: data.success,
+                    latency: data.latency,
+                    error: data.error
+                }
+            }));
+
+            if (data.success) {
+                toast.success(`Model responsive! Latency: ${data.latency}ms`);
+            } else {
+                toast.error(`Model test failed: ${data.error}`);
+            }
+        } catch (error) {
+            console.error('Test error:', error);
+            setTestResults(prev => ({ ...prev, [type]: { success: false, error: 'Network error' } }));
+            toast.error('Failed to test model');
+        } finally {
+            setTestingModel(null);
         }
     };
 
@@ -232,20 +270,47 @@ export default function AdminPage() {
                                 <Cpu className="w-4 h-4 text-muted-foreground" />
                                 Search Model (Speed + Citations)
                             </label>
-                            <select
-                                value={config.search_model}
-                                onChange={(e) => setConfig({ ...config, search_model: e.target.value })}
-                                className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                            >
-                                {RECOMMENDED_MODELS.map((model) => (
-                                    <option key={model.value} value={model.value}>
-                                        {model.label}
-                                    </option>
-                                ))}
-                            </select>
-                            <p className="text-xs text-muted-foreground">
-                                Used for 50-state surveys and individual searches.
-                            </p>
+                            <div className="flex gap-2">
+                                <select
+                                    value={config.search_model}
+                                    onChange={(e) => setConfig({ ...config, search_model: e.target.value })}
+                                    className="flex-1 px-3 py-2 bg-muted border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                >
+                                    {RECOMMENDED_MODELS.map((model) => (
+                                        <option key={model.value} value={model.value}>
+                                            {model.label}
+                                        </option>
+                                    ))}
+                                </select>
+                                <button
+                                    onClick={() => testModel('search')}
+                                    disabled={testingModel === 'search'}
+                                    className="px-3 py-2 bg-muted border border-border rounded-lg text-sm hover:bg-muted/80 disabled:opacity-50 flex items-center gap-1.5 shrink-0"
+                                    title="Test model responsiveness"
+                                >
+                                    {testingModel === 'search' ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : testResults.search?.success ? (
+                                        <Check className="w-4 h-4 text-green-500" />
+                                    ) : testResults.search?.error ? (
+                                        <X className="w-4 h-4 text-red-500" />
+                                    ) : (
+                                        <Zap className="w-4 h-4" />
+                                    )}
+                                    Test
+                                </button>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <p className="text-xs text-muted-foreground flex-1">
+                                    Used for 50-state surveys and individual searches.
+                                </p>
+                                {testResults.search?.latency && (
+                                    <span className="text-xs text-green-500">✓ {testResults.search.latency}ms</span>
+                                )}
+                                {testResults.search?.error && (
+                                    <span className="text-xs text-red-500 truncate max-w-[200px]">{testResults.search.error}</span>
+                                )}
+                            </div>
                         </div>
 
                         {/* Document Model */}
@@ -254,20 +319,47 @@ export default function AdminPage() {
                                 <FileText className="w-4 h-4 text-muted-foreground" />
                                 Document Model (Briefs & Surveys)
                             </label>
-                            <select
-                                value={config.document_model}
-                                onChange={(e) => setConfig({ ...config, document_model: e.target.value })}
-                                className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                            >
-                                {RECOMMENDED_MODELS.map((model) => (
-                                    <option key={model.value} value={model.value}>
-                                        {model.label}
-                                    </option>
-                                ))}
-                            </select>
-                            <p className="text-xs text-muted-foreground">
-                                Used for executive summaries and professional survey documents.
-                            </p>
+                            <div className="flex gap-2">
+                                <select
+                                    value={config.document_model}
+                                    onChange={(e) => setConfig({ ...config, document_model: e.target.value })}
+                                    className="flex-1 px-3 py-2 bg-muted border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                >
+                                    {RECOMMENDED_MODELS.map((model) => (
+                                        <option key={model.value} value={model.value}>
+                                            {model.label}
+                                        </option>
+                                    ))}
+                                </select>
+                                <button
+                                    onClick={() => testModel('document')}
+                                    disabled={testingModel === 'document'}
+                                    className="px-3 py-2 bg-muted border border-border rounded-lg text-sm hover:bg-muted/80 disabled:opacity-50 flex items-center gap-1.5 shrink-0"
+                                    title="Test model responsiveness"
+                                >
+                                    {testingModel === 'document' ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : testResults.document?.success ? (
+                                        <Check className="w-4 h-4 text-green-500" />
+                                    ) : testResults.document?.error ? (
+                                        <X className="w-4 h-4 text-red-500" />
+                                    ) : (
+                                        <Zap className="w-4 h-4" />
+                                    )}
+                                    Test
+                                </button>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <p className="text-xs text-muted-foreground flex-1">
+                                    Used for executive summaries and professional survey documents.
+                                </p>
+                                {testResults.document?.latency && (
+                                    <span className="text-xs text-green-500">✓ {testResults.document.latency}ms</span>
+                                )}
+                                {testResults.document?.error && (
+                                    <span className="text-xs text-red-500 truncate max-w-[200px]">{testResults.document.error}</span>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
