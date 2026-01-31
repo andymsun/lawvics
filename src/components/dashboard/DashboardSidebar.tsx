@@ -11,6 +11,7 @@ import {
     AlertCircle,
     BarChart3,
     Bookmark,
+    Shield,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -43,6 +44,7 @@ export function DashboardSidebar({ activeTab = 'workspace' }: DashboardSidebarPr
         { id: 'workspace', label: 'Workspace', icon: LayoutDashboard, href: '/dashboard' },
         { id: 'history', label: 'History', icon: History, href: '/dashboard/history' },
         { id: 'saved', label: 'Saved', icon: Bookmark, href: '/dashboard/saved' },
+        { id: 'admin', label: 'Admin', icon: Shield, href: '/dashboard/admin' },
     ];
 
     return (

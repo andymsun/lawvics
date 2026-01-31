@@ -4,7 +4,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { generateObject } from 'ai';
 import { z } from 'zod';
-import { SYSTEM_CONFIG } from '@/lib/config';
+import { SYSTEM_CONFIG, getSystemConfig } from '@/lib/config';
 // import * as cheerio from 'cheerio'; // Removed for now to fix unused warning. If needed later, uncomment and use correctly with Edge compat.
 // import { PlaywrightCrawler } from 'crawlee'; // Removed for Edge compatibility
 
@@ -211,34 +211,49 @@ function getModel(
     providerPreference: AiProvider,
     modelName?: string
 ) {
-    // OpenRouter - uses OpenAI-compatible API
-    if (providerPreference === 'openrouter' && keys.openrouter) {
+    // Trim keys to prevent whitespace issues
+    const trimmedKeys = {
+        openai: keys.openai?.trim(),
+        gemini: keys.gemini?.trim(),
+        openrouter: keys.openrouter?.trim(),
+    };
+
+    // OpenRouter - uses OpenAI-compatible API with required headers
+    if (providerPreference === 'openrouter' && trimmedKeys.openrouter) {
         const provider = createOpenAI({
-            apiKey: keys.openrouter,
+            apiKey: trimmedKeys.openrouter,
             baseURL: 'https://openrouter.ai/api/v1',
+            headers: {
+                'HTTP-Referer': 'https://lawvics.com',
+                'X-Title': 'Lawvics',
+            },
         });
         return provider(modelName || 'openai/gpt-4o-mini');
     }
 
-    if (providerPreference === 'openai' && keys.openai) {
-        const provider = createOpenAI({ apiKey: keys.openai });
+    if (providerPreference === 'openai' && trimmedKeys.openai) {
+        const provider = createOpenAI({ apiKey: trimmedKeys.openai });
         return provider(modelName || 'gpt-4o-mini');
     }
-    if (providerPreference === 'gemini' && keys.gemini) {
-        const provider = createGoogleGenerativeAI({ apiKey: keys.gemini });
+    if (providerPreference === 'gemini' && trimmedKeys.gemini) {
+        const provider = createGoogleGenerativeAI({ apiKey: trimmedKeys.gemini });
         return provider(modelName || 'gemini-1.5-flash');
     }
 
     // Fallback logic - try any available key
-    if (keys.openrouter) {
+    if (trimmedKeys.openrouter) {
         const provider = createOpenAI({
-            apiKey: keys.openrouter,
+            apiKey: trimmedKeys.openrouter,
             baseURL: 'https://openrouter.ai/api/v1',
+            headers: {
+                'HTTP-Referer': 'https://lawvics.com',
+                'X-Title': 'Lawvics',
+            },
         });
         return provider('openai/gpt-4o-mini');
     }
-    if (keys.openai) return createOpenAI({ apiKey: keys.openai })('gpt-4o-mini');
-    if (keys.gemini) return createGoogleGenerativeAI({ apiKey: keys.gemini })('gemini-1.5-flash');
+    if (trimmedKeys.openai) return createOpenAI({ apiKey: trimmedKeys.openai })('gpt-4o-mini');
+    if (trimmedKeys.gemini) return createGoogleGenerativeAI({ apiKey: trimmedKeys.gemini })('gemini-1.5-flash');
 
     throw new Error('No valid API key provided for LLM Scraper mode. Please add an OpenAI, Gemini, or OpenRouter API key in Settings.');
 }
@@ -518,7 +533,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
         // Read from headers, or fall back to environment variables (for system-api mode)
         const openaiApiKey = request.headers.get('x-openai-key') || process.env.OPENAI_API_KEY || undefined;
         const geminiApiKey = request.headers.get('x-gemini-key') || process.env.GOOGLE_GENERATIVE_AI_API_KEY || undefined;
-        const openRouterApiKey = SYSTEM_CONFIG.OPENROUTER_API_KEY || request.headers.get('x-openrouter-key') || process.env.OPENROUTER_API_KEY || undefined;
+        // BYOK: Prioritize user's header key over system config
+        const headerOpenRouterKey = request.headers.get('x-openrouter-key');
+        const openRouterApiKey = headerOpenRouterKey || SYSTEM_CONFIG.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY || undefined;
         const openStatesApiKey = request.headers.get('x-openstates-key') || process.env.OPENSTATES_API_KEY || undefined;
         const legiscanApiKey = request.headers.get('x-legiscan-key') || process.env.LEGISCAN_API_KEY || undefined;
         const scrapingApiKey = request.headers.get('x-scraping-key') || process.env.ZENROWS_API_KEY || process.env.SCRAPINGBEE_API_KEY || undefined;
@@ -593,9 +610,22 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
         } else if (dataSource === 'llm-scraper' || dataSource === 'system-api') {
             debug.log(`Using ${dataSource.toUpperCase()} mode`);
             debug.time('llm-scrape');
-            // Determine which provider to use based on available keys
-            const detectedProvider: AiProvider = activeProvider ||
+
+            // For system-api mode, fetch dynamic config from database
+            let effectiveModel = aiModel;
+            let effectiveProvider: AiProvider = activeProvider ||
                 (openRouterApiKey ? 'openrouter' : openaiApiKey ? 'openai' : 'gemini');
+
+            if (dataSource === 'system-api') {
+                try {
+                    const systemConfig = await getSystemConfig();
+                    effectiveModel = effectiveModel || systemConfig.search_model;
+                    effectiveProvider = systemConfig.provider;
+                    debug.log(`Using system config: model=${effectiveModel}, provider=${effectiveProvider}`);
+                } catch (configError) {
+                    debug.log('Failed to fetch system config, using defaults');
+                }
+            }
 
             if (!openaiApiKey && !geminiApiKey && !openRouterApiKey) {
                 throw new Error(`No API key provided for ${dataSource}. Please check your environment variables or Settings.`);
@@ -605,8 +635,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
                 stateCode,
                 query,
                 { openai: openaiApiKey, gemini: geminiApiKey, openrouter: openRouterApiKey },
-                detectedProvider,
-                aiModel,
+                effectiveProvider,
+                effectiveModel,
                 undefined // No proxy for these modes
             );
             debug.timeEnd('llm-scrape');

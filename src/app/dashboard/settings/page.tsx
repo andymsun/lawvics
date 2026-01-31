@@ -344,16 +344,66 @@ const GEMINI_MODELS = [
     { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash (1M Tokens)' },
 ];
 
-const OPENROUTER_MODELS = [
-    { value: 'openai/gpt-4o-mini', label: 'OpenAI GPT-4o-mini (Budget)' },
-    { value: 'openai/gpt-4o', label: 'OpenAI GPT-4o (Premium)' },
-    { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4 (Latest)' },
-    { value: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet' },
-    { value: 'anthropic/claude-3-haiku', label: 'Claude 3 Haiku (Fast)' },
-    { value: 'google/gemini-pro-1.5', label: 'Gemini Pro 1.5' },
-    { value: 'meta-llama/llama-3.1-70b-instruct', label: 'Llama 3.1 70B' },
-    { value: 'mistralai/mistral-large', label: 'Mistral Large' },
+// Fallback models if API fails
+const OPENROUTER_FALLBACK_MODELS = [
+    { value: 'google/gemma-2-9b-it:free', label: 'Google Gemma 2 9B (Free)' },
+    { value: 'meta-llama/llama-3.1-8b-instruct:free', label: 'Llama 3.1 8B (Free)' },
+    { value: 'mistralai/mistral-7b-instruct:free', label: 'Mistral 7B (Free)' },
 ];
+
+// Hook to fetch free OpenRouter models dynamically
+interface OpenRouterModel {
+    id: string;
+    name: string;
+    pricing: { prompt: string; completion: string };
+    context_length: number;
+}
+
+function useOpenRouterFreeModels() {
+    const [models, setModels] = React.useState<{ value: string; label: string }[]>(OPENROUTER_FALLBACK_MODELS);
+    const [isLoading, setIsLoading] = React.useState(true);
+    const [error, setError] = React.useState<string | null>(null);
+
+    React.useEffect(() => {
+        let isMounted = true;
+
+        async function fetchModels() {
+            try {
+                const res = await fetch('https://openrouter.ai/api/v1/models');
+                if (!res.ok) throw new Error('Failed to fetch models');
+
+                const data = await res.json();
+                const allModels: OpenRouterModel[] = data.data || [];
+
+                // Filter for free models (prompt and completion cost both "0")
+                const freeModels = allModels
+                    .filter(m => m.pricing?.prompt === '0' && m.pricing?.completion === '0')
+                    .sort((a, b) => (b.context_length || 0) - (a.context_length || 0))
+                    .map(m => ({
+                        value: m.id,
+                        label: `${m.name} (Free)`,
+                    }));
+
+                if (isMounted && freeModels.length > 0) {
+                    setModels(freeModels);
+                    setError(null);
+                }
+            } catch (err) {
+                if (isMounted) {
+                    setError(err instanceof Error ? err.message : 'Unknown error');
+                    // Keep fallback models
+                }
+            } finally {
+                if (isMounted) setIsLoading(false);
+            }
+        }
+
+        fetchModels();
+        return () => { isMounted = false; };
+    }, []);
+
+    return { models, isLoading, error };
+}
 
 interface ModelSelectorProps {
     settings: SettingsStore;
@@ -363,12 +413,15 @@ interface ModelSelectorProps {
 }
 
 const ModelSelector = ({ settings, testOpenAIKey, testGeminiKey, testOpenRouterKey }: ModelSelectorProps) => {
+    // Fetch dynamic OpenRouter free models
+    const { models: openRouterModels, isLoading: isLoadingModels } = useOpenRouterFreeModels();
+
     // Determine which models list to use based on active provider
     const getModelsList = () => {
         switch (settings.activeAiProvider) {
             case 'openai': return OPENAI_MODELS;
             case 'gemini': return GEMINI_MODELS;
-            case 'openrouter': return OPENROUTER_MODELS;
+            case 'openrouter': return openRouterModels;
             default: return OPENAI_MODELS;
         }
     };
