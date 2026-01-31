@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { streamText } from 'ai';
-import { SYSTEM_CONFIG } from '@/lib/config';
+import { SYSTEM_CONFIG, getSystemConfig } from '@/lib/config';
 import { SURVEY_DOCUMENT_SYSTEM_PROMPT } from '@/lib/prompts/survey-prompt';
 
 export const runtime = 'edge';
@@ -53,23 +53,28 @@ export async function POST(req: NextRequest) {
             });
         }
 
-        // Initialize AI model - prefer larger context models for full survey
-        let aiModel;
-        // For full survey, prefer more capable models
-        const effectiveModel = isSystemApi
-            ? 'openai/gpt-4o-mini'  // Cost-effective but capable
-            : model;
+        // For system-api mode, get document model from database config
+        let effectiveModel = model;
+        if (isSystemApi) {
+            try {
+                const systemConfig = await getSystemConfig();
+                effectiveModel = systemConfig.document_model;
+            } catch {
+                effectiveModel = 'mistralai/mistral-small-3.1-24b-instruct:free';
+            }
+        }
 
+        // Initialize AI model
+        let aiModel;
         if (effectiveProvider === 'gemini') {
             const google = createGoogleGenerativeAI({ apiKey });
-            // Prefer 1.5 Pro for large context
             aiModel = google(effectiveModel || 'gemini-1.5-pro');
         } else if (effectiveProvider === 'openrouter') {
             const openrouter = createOpenAI({
                 apiKey,
                 baseURL: 'https://openrouter.ai/api/v1',
             });
-            aiModel = openrouter(effectiveModel || 'openai/gpt-4o-mini');
+            aiModel = openrouter(effectiveModel || 'mistralai/mistral-small-3.1-24b-instruct:free');
         } else {
             const openai = createOpenAI({ apiKey });
             aiModel = openai(effectiveModel || 'gpt-4o-mini');

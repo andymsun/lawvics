@@ -21,7 +21,7 @@ export interface SystemConfig {
 }
 
 const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
-    search_model: 'meta-llama/llama-3.3-70b-instruct:free',
+    search_model: 'deepseek/deepseek-chat:free',
     document_model: 'mistralai/mistral-small-3.1-24b-instruct:free',
     provider: 'openrouter',
 };

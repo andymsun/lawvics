@@ -20,11 +20,11 @@ interface SystemConfig {
 // ============================================================
 
 const RECOMMENDED_MODELS = [
-    { value: 'meta-llama/llama-3.3-70b-instruct:free', label: 'Llama 3.3 70B (Fast, GPT-4 level)' },
-    { value: 'mistralai/mistral-small-3.1-24b-instruct:free', label: 'Mistral Small 3.1 (128K context, great reasoning)' },
-    { value: 'google/gemma-2-9b-it:free', label: 'Gemma 2 9B (Ultra-fast fallback)' },
-    { value: 'meta-llama/llama-4-maverick:free', label: 'Llama 4 Maverick (Multimodal, high accuracy)' },
-    { value: 'nvidia/llama-3.1-nemotron-70b-instruct:free', label: 'Nemotron 70B (High accuracy)' },
+    { value: 'deepseek/deepseek-chat:free', label: 'DeepSeek Chat (Best free, GPT-4 level)' },
+    { value: 'mistralai/mistral-small-3.1-24b-instruct:free', label: 'Mistral Small 3.1 (128K context, great for docs)' },
+    { value: 'google/gemini-2.0-flash-exp:free', label: 'Gemini 2.0 Flash (Fast, 1M context)' },
+    { value: 'qwen/qwen-2.5-72b-instruct:free', label: 'Qwen 2.5 72B (Great structured output)' },
+    { value: 'meta-llama/llama-3.3-70b-instruct:free', label: 'Llama 3.3 70B (Reliable fallback)' },
 ];
 
 // ============================================================
@@ -37,7 +37,7 @@ export default function AdminPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [config, setConfig] = useState<SystemConfig>({
-        search_model: 'meta-llama/llama-3.3-70b-instruct:free',
+        search_model: 'deepseek/deepseek-chat:free',
         document_model: 'mistralai/mistral-small-3.1-24b-instruct:free',
         provider: 'openrouter',
     });
