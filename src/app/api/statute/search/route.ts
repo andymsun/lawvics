@@ -300,15 +300,25 @@ async function scrapeStateStatute(
 
     // Proxy Logic (ZenRows / ScrapingBee compatible)
     let targetUrl = baseUrl;
+    // Enhanced headers to look like a real browser
     let headers: Record<string, string> = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Referer': 'https://www.google.com/',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'cross-site',
+        'Sec-Fetch-User': '?1'
     };
 
     if (scrapingApiKey && scrapingApiKey.length > 5) {
         // Assume ZenRows format for now as default, or simple proxy param
         // Example: https://api.zenrows.com/v1/?apikey=KEY&url=URL
-        targetUrl = `https://api.zenrows.com/v1/?apikey=${scrapingApiKey}&url=${encodeURIComponent(baseUrl)}`;
-        // Clear headers for proxy if needed, or keep them. ZenRows handles UA.
+        targetUrl = `https://api.zenrows.com/v1/?apikey=${scrapingApiKey}&url=${encodeURIComponent(baseUrl)}&js_render=true&premium_proxy=true`;
+        // ZenRows typically handles headers, but keeping basic ones helps
         headers = {};
     }
 
@@ -333,12 +343,23 @@ async function scrapeStateStatute(
             }
 
             // Handle rate limiting (429) and server errors (5xx)
+            // 403 Forbidden is also common with WAFs - we can try to retry, but usually it persists.
             if (res.status === 429 || res.status >= 500) {
                 const retryAfter = res.headers.get('Retry-After');
                 const delay = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, attempt) * 1000;
                 console.log(`[Scraper] ${stateCode} got ${res.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
                 await new Promise(r => setTimeout(r, delay));
                 continue;
+            }
+
+            if (res.status === 403) {
+                // If using proxy, maybe retry? If direct, we are blocked.
+                if (attempt < MAX_RETRIES - 1) {
+                    console.log(`[Scraper] ${stateCode} got 403 (WAF block), retrying...`);
+                    await new Promise(r => setTimeout(r, 2000));
+                    continue;
+                }
+                throw new Error(`Access Denied (WAF Block) by ${stateCode} legislature`);
             }
 
             if (res.status === 404) {
@@ -350,6 +371,12 @@ async function scrapeStateStatute(
             }
 
             const html = await res.text();
+
+            // WAF / Cloudflare Check (sometimes returns 200 OK with block page)
+            if (html.includes('Access Denied') || html.includes('Cloudflare') || html.includes('Verify you are human')) {
+                throw new Error(`Access Denied (Cloudflare/WAF) for ${stateCode}`);
+            }
+
             // 2. Clean text (remove scripts, styles, etc.) without Cheerio
             const cleanText = html
                 .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "") // Remove scripts
