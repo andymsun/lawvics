@@ -240,7 +240,7 @@ function getModel(
         return provider(modelName || 'gemini-1.5-flash');
     }
 
-    // Fallback logic - try any available key
+    // Fallback logic - try any available key, preserving modelName if provided
     if (trimmedKeys.openrouter) {
         const provider = createOpenAI({
             apiKey: trimmedKeys.openrouter,
@@ -250,10 +250,15 @@ function getModel(
                 'X-Title': 'Lawvics',
             },
         });
-        return provider('openai/gpt-4o-mini');
+        // Use provided modelName or default - was previously ignoring modelName in fallback
+        return provider(modelName || 'openai/gpt-4o-mini');
     }
-    if (trimmedKeys.openai) return createOpenAI({ apiKey: trimmedKeys.openai })('gpt-4o-mini');
-    if (trimmedKeys.gemini) return createGoogleGenerativeAI({ apiKey: trimmedKeys.gemini })('gemini-1.5-flash');
+    if (trimmedKeys.openai) {
+        return createOpenAI({ apiKey: trimmedKeys.openai })(modelName || 'gpt-4o-mini');
+    }
+    if (trimmedKeys.gemini) {
+        return createGoogleGenerativeAI({ apiKey: trimmedKeys.gemini })(modelName || 'gemini-1.5-flash');
+    }
 
     throw new Error('No valid API key provided for LLM Scraper mode. Please add an OpenAI, Gemini, or OpenRouter API key in Settings.');
 }
@@ -611,7 +616,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
             debug.log(`Using ${dataSource.toUpperCase()} mode`);
             debug.time('llm-scrape');
 
-            // For system-api mode, fetch dynamic config from database
+            // For system-api mode, ALWAYS use config from database (ignore client-sent model)
             let effectiveModel = aiModel;
             let effectiveProvider: AiProvider = activeProvider ||
                 (openRouterApiKey ? 'openrouter' : openaiApiKey ? 'openai' : 'gemini');
@@ -619,11 +624,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
             if (dataSource === 'system-api') {
                 try {
                     const systemConfig = await getSystemConfig();
-                    effectiveModel = effectiveModel || systemConfig.search_model;
+                    // System-api mode ALWAYS uses system config (not fallback)
+                    effectiveModel = systemConfig.search_model;
                     effectiveProvider = systemConfig.provider;
                     debug.log(`Using system config: model=${effectiveModel}, provider=${effectiveProvider}`);
                 } catch (configError) {
                     debug.log('Failed to fetch system config, using defaults');
+                    effectiveModel = 'deepseek/deepseek-chat:free';
+                    effectiveProvider = 'openrouter';
                 }
             }
 

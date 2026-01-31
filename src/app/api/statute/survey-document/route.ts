@@ -122,16 +122,22 @@ ${formattedStatutes}
 
 Using the data above, generate a complete professional 50-state survey document following the exact structure and formatting in your instructions.
 
-IMPORTANT:
+CRITICAL REQUIREMENTS - DO NOT SKIP:
+- You MUST explicitly list and analyze ALL 50 states individually
+- NEVER use shorthand like "[Continue for all 50 states]", "[Repeat for remaining states]", or "[etc.]"
+- NEVER skip states or use ellipses (...) to abbreviate the state list
+- Every state must be named explicitly in the comparison table and analysis
+- If a state has no data, still include it with "Pending" or "No Data" status
+- The document MUST contain all 14 sections as specified
+- Use proper Bluebook citation format for all citations
+
+QUALITY REQUIREMENTS:
 - Use the actual state data provided above
-- For states not in the data, mark as "Pending" or "No Data"
-- Include all 14 sections as specified
-- Use proper Bluebook citation format
 - Quantify all findings with specific numbers and percentages
 - Identify outliers by name (CA, TX, NY, etc.)
 - Generate realistic analysis based on the topic and available data
 
-Generate the complete document now:`;
+Generate the COMPLETE document now with ALL 50 states explicitly listed:`;
 
         // Use streaming for progressive display
         const result = streamText({
