@@ -62,15 +62,49 @@ const RECOMMENDED_PAID_MODELS: Record<string, { tags: ('fastest' | 'smartest' | 
     'mistralai/mistral-medium': { tags: ['balanced'] },
 };
 
-// Curated list of recommended free models
+// Curated list of recommended free models with tags
+// Models not in this list will still show but without tags
 const RECOMMENDED_FREE_MODELS: Record<string, { tags: ('fastest' | 'smartest' | 'writing' | 'balanced')[] }> = {
+    // Google
     'google/gemini-2.0-flash-exp:free': { tags: ['fastest'] },
+    'google/gemini-2.0-flash-thinking-exp:free': { tags: ['smartest'] },
+    'google/gemma-2-27b-it:free': { tags: ['fastest'] },
+    'google/gemma-2-9b-it:free': { tags: ['fastest'] },
+
+    // DeepSeek
     'deepseek/deepseek-chat:free': { tags: ['smartest', 'balanced'] },
     'deepseek/deepseek-r1:free': { tags: ['smartest'] },
+    'deepseek/deepseek-r1-distill-llama-70b:free': { tags: ['smartest', 'balanced'] },
+    'deepseek/deepseek-r1-distill-qwen-32b:free': { tags: ['smartest'] },
+
+    // Mistral
     'mistralai/mistral-small-3.1-24b-instruct:free': { tags: ['writing', 'balanced'] },
-    'qwen/qwen-2.5-72b-instruct:free': { tags: ['balanced'] },
+    'mistralai/mistral-7b-instruct:free': { tags: ['fastest'] },
+    'mistralai/mistral-nemo:free': { tags: ['balanced'] },
+
+    // Meta Llama
     'meta-llama/llama-3.3-70b-instruct:free': { tags: ['balanced'] },
-    'google/gemma-2-27b-it:free': { tags: ['fastest'] },
+    'meta-llama/llama-3.2-11b-vision-instruct:free': { tags: ['balanced'] },
+    'meta-llama/llama-3.2-3b-instruct:free': { tags: ['fastest'] },
+    'meta-llama/llama-3.2-1b-instruct:free': { tags: ['fastest'] },
+    'meta-llama/llama-3.1-70b-instruct:free': { tags: ['balanced'] },
+    'meta-llama/llama-3.1-8b-instruct:free': { tags: ['fastest'] },
+
+    // Qwen
+    'qwen/qwen-2.5-72b-instruct:free': { tags: ['balanced'] },
+    'qwen/qwen-2.5-32b-instruct:free': { tags: ['balanced'] },
+    'qwen/qwen-2.5-coder-32b-instruct:free': { tags: ['balanced'] },
+    'qwen/qwen-2.5-7b-instruct:free': { tags: ['fastest'] },
+    'qwen/qwq-32b:free': { tags: ['smartest'] },
+    'qwen/qwq-32b-preview:free': { tags: ['smartest'] },
+
+    // Microsoft
+    'microsoft/phi-3-medium-128k-instruct:free': { tags: ['fastest'] },
+    'microsoft/phi-3-mini-128k-instruct:free': { tags: ['fastest'] },
+
+    // Other
+    'nvidia/llama-3.1-nemotron-70b-instruct:free': { tags: ['balanced'] },
+    'huggingfaceh4/zephyr-7b-beta:free': { tags: ['fastest'] },
 };
 
 export async function GET(): Promise<NextResponse> {
@@ -105,8 +139,8 @@ export async function GET(): Promise<NextResponse> {
                 ? (RECOMMENDED_FREE_MODELS[model.id]?.tags || [])
                 : (RECOMMENDED_PAID_MODELS[model.id]?.tags || []);
 
-            // Skip non-curated models for cleaner list
-            if (tags.length === 0) continue;
+            // Include ALL free models (even without tags), but only curated paid models
+            if (!isFree && tags.length === 0) continue;
 
             const modelInfo: ModelInfo = {
                 value: model.id,
