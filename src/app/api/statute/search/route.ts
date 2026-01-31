@@ -366,11 +366,17 @@ async function scrapeStateStatute(
 
             // Wrap generateObject in a timeout promise
             const llmTimeout = 60000; // 60s timeout for LLM
-            const llmResult = await Promise.race([
-                generateObject({
-                    model,
-                    schema: ScraperSchema,
-                    system: `You are a legal research assistant specializing in US state statutory law. Your task is to extract precise statute citations and text from state legislature websites.
+
+            let object: z.infer<typeof ScraperSchema>;
+
+            try {
+                const llmResult = await Promise.race([
+                    generateObject({
+                        model,
+                        schema: ScraperSchema,
+                        // @ts-ignore - 'json' mode hint for some providers
+                        mode: 'json',
+                        system: `You are a legal research assistant specializing in US state statutory law. Your task is to extract precise statute citations and text from state legislature websites.
 
 RULES:
 1. Always provide the EXACT citation format used by the state (e.g., "Cal. Civ. Code § 335.1" or "N.Y. Gen. Bus. Law § 349").
@@ -380,20 +386,29 @@ RULES:
 5. Always include the effective date if mentioned in the text.
 6. Do NOT hallucinate citations. If unsure, use "None found" and set confidence to 0.
 7. The textSnippet should be the actual statute text, not a summary.
+8. OUTPUT PURE JSON ONLY. NO PREAMBLE, NO POSTSCRIPT, NO THINKING BLOCKS.
 
 PRIORITY: Accuracy over completeness. A "None found" with 0 confidence is better than a hallucinated citation.`,
-                    prompt: `Extract the statute that answers the query "${query}" from this ${stateCode} legislature webpage content:
+                        prompt: `Extract the statute that answers the query "${query}" from this ${stateCode} legislature webpage content:
 
 ---
 ${cleanText}
 ---
 
 If you find a specific statute section number and text, extract it. If the page is a search results page or index, report "None found".`,
-                }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('LLM request timed out after 60 seconds')), llmTimeout))
-            ]) as { object: z.infer<typeof ScraperSchema> };
+                    }),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('LLM request timed out after 60 seconds')), llmTimeout))
+                ]) as { object: z.infer<typeof ScraperSchema> };
 
-            const { object } = llmResult;
+                object = llmResult.object;
+            } catch (err: unknown) {
+                const errMsg = err instanceof Error ? err.message : String(err);
+                console.error(`[Scraper] generateObject failed for ${stateCode}: ${errMsg}`);
+
+                // If it's the "No object generated" error, it means parsing failed (likely due to reasoning tokens or bad JSON)
+                // We could fallback to text generation, but for now let's just retry
+                throw new Error(`LLM output parsing failed: ${errMsg}`);
+            }
 
             return {
                 stateCode,
@@ -630,7 +645,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
                     debug.log(`Using system config: model=${effectiveModel}, provider=${effectiveProvider}`);
                 } catch (configError) {
                     debug.log('Failed to fetch system config, using defaults');
-                    effectiveModel = 'deepseek/deepseek-chat:free';
+                    effectiveModel = 'meta-llama/llama-3.3-70b-instruct:free'; // Llama 3.3 is more reliable for JSON than DeepSeek
                     effectiveProvider = 'openrouter';
                 }
             }
