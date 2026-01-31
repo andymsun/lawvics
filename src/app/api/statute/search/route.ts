@@ -562,6 +562,28 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
     debug.log('=== REQUEST START ===');
     debug.time('total-request');
 
+    // 0. Maintenance Mode Check
+    try {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+        if (supabaseUrl && supabaseKey) {
+            const supabase = createClient(supabaseUrl, supabaseKey);
+            const { data: configData } = await supabase.from('system_config').select('key, value');
+            const maintConfig = configData?.find(r => r.key === 'maintenance_mode');
+            if (maintConfig?.value) {
+                const isMaintenance = JSON.parse(maintConfig.value);
+                if (isMaintenance) {
+                    return NextResponse.json(
+                        { success: false, error: 'System is under maintenance. Please try again later.' },
+                        { status: 503 }
+                    );
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('Failed to check maintenance mode in search API:', e);
+    }
+
     try {
         const body: SearchRequest = await request.json();
         const { stateCode, query } = body;

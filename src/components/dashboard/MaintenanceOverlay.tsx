@@ -35,6 +35,12 @@ export const MaintenanceOverlay = () => {
                 <p className="text-xs text-muted-foreground pt-8">
                     Contact your administrator for more information.
                 </p>
+
+                <div className="pt-4">
+                    <a href="/dashboard/admin" className="text-xs text-muted-foreground/50 hover:text-muted-foreground hover:underline transition-colors">
+                        Admin Login
+                    </a>
+                </div>
             </div>
         </div>
     );

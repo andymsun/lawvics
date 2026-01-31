@@ -6,6 +6,7 @@ import { InfiniteGridHero } from '@/components/ui/infinite-grid-hero';
 import { ArrowRight, Sparkles } from 'lucide-react';
 import { BrandLogo } from '@/components/ui/BrandLogo';
 import { AnimatePresence, motion } from 'framer-motion';
+import { MaintenanceOverlay } from '@/components/dashboard/MaintenanceOverlay';
 
 const PROMPTS = [
   "Statute of limitations for fraud...",
@@ -16,6 +17,18 @@ const PROMPTS = [
 export default function Home() {
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [inputValue, setInputValue] = useState("");
+  const [isMaintenance, setIsMaintenance] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/admin/config')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.data?.maintenance_mode) {
+          setIsMaintenance(true);
+        }
+      })
+      .catch(err => console.error('Failed to check maintenance mode', err));
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -24,6 +37,10 @@ export default function Home() {
 
     return () => clearInterval(interval);
   }, []);
+
+  if (isMaintenance) {
+    return <MaintenanceOverlay />;
+  }
 
   return (
     <InfiniteGridHero>
