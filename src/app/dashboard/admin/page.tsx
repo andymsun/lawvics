@@ -20,6 +20,7 @@ interface SystemConfig {
     max_parallel_requests: number;
     rate_limit_per_hour: number;
     disable_parallel: boolean;
+    sequential_batch_size: number;
     enable_proxy: boolean;
     // Feature Flags
     maintenance_mode: boolean;
@@ -85,6 +86,7 @@ export default function AdminPage() {
         max_parallel_requests: 10,
         rate_limit_per_hour: 0,
         disable_parallel: false,
+        sequential_batch_size: 1,
         enable_proxy: true,
         maintenance_mode: false,
         enable_demo_mode: true,
@@ -145,6 +147,7 @@ export default function AdminPage() {
                     max_parallel_requests: data.data.max_parallel_requests ?? prev.max_parallel_requests,
                     rate_limit_per_hour: data.data.rate_limit_per_hour ?? prev.rate_limit_per_hour,
                     disable_parallel: data.data.disable_parallel ?? prev.disable_parallel,
+                    sequential_batch_size: data.data.sequential_batch_size ?? prev.sequential_batch_size,
                     enable_proxy: data.data.enable_proxy ?? prev.enable_proxy,
                     maintenance_mode: data.data.maintenance_mode ?? prev.maintenance_mode,
                     enable_demo_mode: data.data.enable_demo_mode ?? prev.enable_demo_mode,
@@ -631,6 +634,38 @@ export default function AdminPage() {
                                 />
                             </button>
                         </div>
+
+                        {/* States Per API Call - Only visible when parallel is disabled */}
+                        {config.disable_parallel && (
+                            <div className="md:col-span-2 pt-4 border-t border-border/50 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <div className="space-y-1">
+                                        <label className="text-sm font-medium flex items-center gap-2">
+                                            States Per API Call
+                                            <span className="px-2 py-0.5 bg-blue-500/10 text-blue-500 text-xs rounded-full">
+                                                {Math.ceil(50 / config.sequential_batch_size)} calls total
+                                            </span>
+                                        </label>
+                                        <p className="text-xs text-muted-foreground">
+                                            Bundle multiple states into one LLM call during sequential mode. Higher = fewer calls but less precise.
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            max={10}
+                                            value={config.sequential_batch_size}
+                                            onChange={(e) => setConfig({ ...config, sequential_batch_size: Math.min(10, Math.max(1, parseInt(e.target.value) || 1)) })}
+                                            className="w-20 px-3 py-2 bg-muted border border-border rounded-lg text-sm text-center font-mono focus:outline-none focus:ring-2 focus:ring-primary"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex gap-2 text-xs text-muted-foreground">
+                                    <span className="px-2 py-1 bg-muted rounded">e.g. 5 states/call × 10 calls = 50 states</span>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Enable Scraping Proxy */}
                         <div className="flex items-center justify-between md:col-span-2 pt-4 border-t border-border/50">

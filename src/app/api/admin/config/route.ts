@@ -43,6 +43,7 @@ const DEFAULT_CONFIG: Record<string, unknown> = {
     document_model: 'mistralai/mistral-small-3.1-24b-instruct:free',
     provider: 'openrouter',
     disable_parallel: false,
+    sequential_batch_size: 1, // States per API call when parallel is disabled (1-10)
     forced_mode: 'none', // none, system-api, llm-scraper, official-api, mock
     enable_proxy: true,
 };

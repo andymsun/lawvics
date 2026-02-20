@@ -618,13 +618,14 @@ interface AdminConfig {
     allow_byok: boolean;
     maintenance_mode: boolean;
     disable_parallel: boolean;
+    sequential_batch_size: number;
 }
 
 export default function SettingsPage() {
     const settings = useSettingsStore();
     const { theme, setTheme } = useTheme();
     const [activeTab, setActiveTab] = useState<TabType>('datasource');
-    const [adminConfig, setAdminConfig] = useState<AdminConfig>({ forced_mode: 'none', allow_byok: true, maintenance_mode: false, disable_parallel: false });
+    const [adminConfig, setAdminConfig] = useState<AdminConfig>({ forced_mode: 'none', allow_byok: true, maintenance_mode: false, disable_parallel: false, sequential_batch_size: 1 });
 
     // Fetch admin config on mount to check restrictions
     React.useEffect(() => {
@@ -638,6 +639,7 @@ export default function SettingsPage() {
                         allow_byok: data.data.allow_byok ?? true,
                         maintenance_mode: data.data.maintenance_mode ?? false,
                         disable_parallel: data.data.disable_parallel ?? false,
+                        sequential_batch_size: data.data.sequential_batch_size ?? 1,
                     });
                     // If forced_mode is set, switch to that data source
                     if (data.data.forced_mode && data.data.forced_mode !== 'none') {
@@ -989,6 +991,24 @@ export default function SettingsPage() {
                                         onChange={() => settings.toggleSetting(option.id)}
                                     />
                                 ))}
+
+                                {/* Sequential Mode Info Banner */}
+                                {adminConfig.disable_parallel && (
+                                    <div className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-lg">
+                                        <div className="flex items-start gap-3">
+                                            <AlertTriangle className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" />
+                                            <div>
+                                                <p className="font-medium text-foreground">Sequential Mode Active</p>
+                                                <p className="text-sm text-muted-foreground mt-1">
+                                                    Parallel fetching is disabled by admin. Searches run sequentially with{' '}
+                                                    <span className="font-mono font-semibold text-amber-500">{adminConfig.sequential_batch_size}</span>{' '}
+                                                    {adminConfig.sequential_batch_size === 1 ? 'state' : 'states'} per API call
+                                                    ({Math.ceil(50 / adminConfig.sequential_batch_size)} calls total).
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Batch Size Configuration - Hidden if Paralellization Disabled or System API Forced */}
                                 {!adminConfig.disable_parallel && adminConfig.forced_mode !== 'system-api' && (

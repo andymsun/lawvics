@@ -498,19 +498,22 @@ export class MaxConcurrentSurveysError extends Error {
 }
 
 // Helper to fetch system config safely
-async function checkSystemConfig(): Promise<{ disable_parallel: boolean }> {
+async function checkSystemConfig(): Promise<{ disable_parallel: boolean; sequential_batch_size: number }> {
     try {
         const res = await fetch('/api/admin/config');
         if (res.ok) {
             const data = await res.json();
             if (data.success && data.data) {
-                return { disable_parallel: !!data.data.disable_parallel };
+                return {
+                    disable_parallel: !!data.data.disable_parallel,
+                    sequential_batch_size: data.data.sequential_batch_size ?? 1,
+                };
             }
         }
     } catch {
         // ignore errors
     }
-    return { disable_parallel: false };
+    return { disable_parallel: false, sequential_batch_size: 1 };
 }
 
 /**
@@ -542,9 +545,10 @@ export async function searchAllStates(
     }
 
     // 2. Determine effective batch size
-    // For demo queries or disabled parallel, force batch size 1
+    // For demo queries, force batch size 1 for animation
+    // For disabled parallel, use the admin-configured sequential_batch_size
     const isDemo = isDemoQuery(userQuery);
-    const effectiveBatchSize = (isDemo || isParallelDisabled) ? 1 : batchSize;
+    const effectiveBatchSize = isDemo ? 1 : isParallelDisabled ? (config.sequential_batch_size || 1) : batchSize;
 
     // 3. Chunk the 50 states according to effective batch size
     const chunks = chunkArray(ALL_STATE_CODES, effectiveBatchSize);
@@ -562,9 +566,35 @@ export async function searchAllStates(
                 return;
             }
 
-            const [successes, errors] = await processChunk(chunk, userQuery, surveyId, useMockMode);
-            totalSuccesses += successes;
-            totalErrors += errors;
+            // When sequential batch size > 1 and not demo, use batch API for efficiency
+            if (!isDemo && effectiveBatchSize > 1) {
+                try {
+                    debug.log(`[Sequential Batch] Fetching ${chunk.length} states in one API call: ${chunk.join(', ')}`);
+                    const batchResults = await fetchBatchStatutes(chunk as StateCode[], userQuery);
+
+                    // Store each state's result from the batch response
+                    for (const stateCode of chunk) {
+                        const statute = batchResults[stateCode];
+                        if (statute) {
+                            surveyStore.setSessionStatute(surveyId, stateCode, statute);
+                            totalSuccesses++;
+                        } else {
+                            surveyStore.setSessionError(surveyId, stateCode, new Error('No data returned in batch'));
+                            totalErrors++;
+                        }
+                    }
+                } catch (error) {
+                    debug.error(`[Sequential Batch] Batch failed, falling back to individual calls:`, error);
+                    // Fallback: process individually
+                    const [successes, errors] = await processChunk(chunk as StateCode[], userQuery, surveyId, useMockMode);
+                    totalSuccesses += successes;
+                    totalErrors += errors;
+                }
+            } else {
+                const [successes, errors] = await processChunk(chunk as StateCode[], userQuery, surveyId, useMockMode);
+                totalSuccesses += successes;
+                totalErrors += errors;
+            }
 
             // Randomized delay for demo animation (100-500ms), or fixed delay for slow mode
             const delay = isDemo ? Math.floor(Math.random() * 400) + 100 : 500;
