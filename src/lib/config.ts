@@ -31,6 +31,9 @@ export interface SystemConfig {
     // Feature Flags
     maintenance_mode: boolean;      // Disable all API calls when true
     enable_demo_mode: boolean;      // Allow demo/mock data mode
+
+    // Scraping Method
+    scraping_method: 'default' | 'firecrawl';  // Which scraping backend system-api uses
 }
 
 const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
@@ -43,6 +46,7 @@ const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
     rate_limit_per_hour: 0,
     maintenance_mode: false,
     enable_demo_mode: true,
+    scraping_method: 'default',
 };
 
 // ============================================================

@@ -14,7 +14,7 @@ interface SystemConfig {
     document_model: string;
     provider: 'openai' | 'gemini' | 'openrouter';
     // Access Control
-    forced_mode: 'none' | 'system-api' | 'llm-scraper' | 'official-api' | 'mock';
+    forced_mode: 'none' | 'system-api' | 'llm-scraper' | 'official-api' | 'mock' | 'firecrawl';
     allow_byok: boolean;
     // Operational Settings
     max_parallel_requests: number;
@@ -25,6 +25,8 @@ interface SystemConfig {
     // Feature Flags
     maintenance_mode: boolean;
     enable_demo_mode: boolean;
+    // Scraping Backend
+    scraping_method: 'default' | 'firecrawl';
 }
 
 type ModelTag = 'fastest' | 'smartest' | 'writing' | 'balanced';
@@ -90,6 +92,7 @@ export default function AdminPage() {
         enable_proxy: true,
         maintenance_mode: false,
         enable_demo_mode: true,
+        scraping_method: 'default',
     });
 
     // All models combined for lookup
@@ -564,6 +567,26 @@ export default function AdminPage() {
                                         }`}
                                 />
                             </button>
+                        </div>
+
+                        {/* System API Scraping Backend */}
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-1">
+                                <label className="text-sm font-medium">System API Scraping Backend</label>
+                                <p className="text-xs text-muted-foreground">
+                                    Choose how System API fetches data. Requires FIRECRAWL_API_KEY env var for Firecrawl.
+                                </p>
+                            </div>
+                            <div className="relative">
+                                <select
+                                    value={config.scraping_method || 'default'}
+                                    onChange={(e) => setConfig({ ...config, scraping_method: e.target.value as 'default' | 'firecrawl' })}
+                                    className="block w-48 px-3 py-2 bg-muted border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary appearance-none"
+                                >
+                                    <option value="default">Default (LLM Scraper)</option>
+                                    <option value="firecrawl">🔥 Firecrawl</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                 </div>

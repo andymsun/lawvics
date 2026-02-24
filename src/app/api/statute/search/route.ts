@@ -713,13 +713,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
             let effectiveProvider: AiProvider = activeProvider ||
                 (openRouterApiKey ? 'openrouter' : openaiApiKey ? 'openai' : 'gemini');
 
+            let systemScrapingMethod: 'default' | 'firecrawl' = 'default';
+
             if (dataSource === 'system-api') {
                 try {
                     const systemConfig = await getSystemConfig();
                     // System-api mode ALWAYS uses system config (not fallback)
                     effectiveModel = systemConfig.search_model;
                     effectiveProvider = systemConfig.provider;
-                    debug.log(`Using system config: model=${effectiveModel}, provider=${effectiveProvider}`);
+                    systemScrapingMethod = systemConfig.scraping_method || 'default';
+                    debug.log(`Using system config: model=${effectiveModel}, provider=${effectiveProvider}, scraping=${systemScrapingMethod}`);
                 } catch (configError) {
                     debug.log('Failed to fetch system config, using defaults');
                     effectiveModel = 'meta-llama/llama-3.3-70b-instruct:free'; // Llama 3.3 is more reliable for JSON than DeepSeek
@@ -731,14 +734,89 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
                 throw new Error(`No API key provided for ${dataSource}. Please check your environment variables or Settings.`);
             }
 
-            statute = await scrapeStateStatute(
-                stateCode,
-                query,
-                { openai: openaiApiKey, gemini: geminiApiKey, openrouter: openRouterApiKey },
-                effectiveProvider,
-                effectiveModel,
-                undefined // No proxy for these modes
-            );
+            // If system-api is configured to use Firecrawl, use the Firecrawl pipeline
+            if (dataSource === 'system-api' && systemScrapingMethod === 'firecrawl') {
+                const systemFirecrawlKey = firecrawlApiKey || process.env.FIRECRAWL_API_KEY;
+                if (!systemFirecrawlKey) {
+                    throw new Error('System API is configured to use Firecrawl, but FIRECRAWL_API_KEY env var is not set.');
+                }
+
+                debug.log('System API using Firecrawl backend');
+                const legislatureUrl = STATE_LEGISLATURE_URLS[stateCode];
+                if (!legislatureUrl) throw new Error(`No legislature URL for ${stateCode}`);
+
+                const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${systemFirecrawlKey}`,
+                    },
+                    body: JSON.stringify({
+                        url: legislatureUrl,
+                        formats: ['markdown'],
+                        waitFor: 3000,
+                    }),
+                });
+
+                if (!firecrawlResponse.ok) {
+                    const errBody = await firecrawlResponse.text().catch(() => 'Unknown error');
+                    throw new Error(`Firecrawl API error (${firecrawlResponse.status}): ${errBody}`);
+                }
+
+                const firecrawlData = await firecrawlResponse.json();
+                const pageMarkdown = firecrawlData?.data?.markdown || '';
+
+                if (!pageMarkdown || pageMarkdown.length < 50) {
+                    throw new Error(`Firecrawl returned insufficient content for ${stateCode}`);
+                }
+
+                const truncatedContent = pageMarkdown.slice(0, 15000);
+
+                // Build LLM client using system config provider
+                let model;
+                if (effectiveProvider === 'openai' && openaiApiKey) {
+                    const openai = createOpenAI({ apiKey: openaiApiKey });
+                    model = openai(effectiveModel || 'gpt-4o-mini');
+                } else if (effectiveProvider === 'gemini' && geminiApiKey) {
+                    const google = createGoogleGenerativeAI({ apiKey: geminiApiKey });
+                    model = google(effectiveModel || 'gemini-1.5-flash');
+                } else if (openRouterApiKey) {
+                    const openrouter = createOpenAI({ apiKey: openRouterApiKey, baseURL: 'https://openrouter.ai/api/v1' });
+                    model = openrouter(effectiveModel || 'openai/gpt-4o-mini');
+                } else {
+                    throw new Error('No valid LLM API key found for system Firecrawl extraction');
+                }
+
+                const { object: extracted } = await generateObject({
+                    model,
+                    schema: z.object({
+                        citation: z.string().describe('The statute citation (e.g., "CA Code § 335.1")'),
+                        textSnippet: z.string().describe('A concise summary of the relevant statute text (2-3 sentences)'),
+                        effectiveDate: z.string().describe('The effective date of the statute, if available'),
+                        confidenceScore: z.number().min(0).max(100).describe('Confidence score from 0-100'),
+                    }),
+                    prompt: `You are a legal research assistant. Extract the most relevant statute about "${query}" for state ${stateCode} from this content.\n\nContent:\n${truncatedContent}\n\nReturn the statute citation, a concise text snippet, effective date, and your confidence score.`,
+                });
+
+                statute = {
+                    stateCode,
+                    citation: extracted.citation,
+                    textSnippet: extracted.textSnippet,
+                    effectiveDate: extracted.effectiveDate || 'Unknown',
+                    confidenceScore: extracted.confidenceScore || 0,
+                    sourceUrl: legislatureUrl,
+                };
+            } else {
+                // Default scraping method
+                statute = await scrapeStateStatute(
+                    stateCode,
+                    query,
+                    { openai: openaiApiKey, gemini: geminiApiKey, openrouter: openRouterApiKey },
+                    effectiveProvider,
+                    effectiveModel,
+                    undefined // No proxy for these modes
+                );
+            }
             debug.timeEnd('llm-scrape');
         } else if (dataSource === 'scraping-proxy') {
             debug.log('Using SCRAPING-PROXY mode');

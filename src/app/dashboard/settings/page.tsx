@@ -979,6 +979,15 @@ export default function SettingsPage() {
                                             getKeyUrl="https://aistudio.google.com/app/apikey"
                                             onTest={testGeminiKey}
                                         />
+                                        <ApiKeyInput
+                                            label="OpenRouter API Key (alternative)"
+                                            value={settings.openRouterApiKey}
+                                            onChange={settings.setOpenRouterApiKey}
+                                            helperText="Use OpenRouter for extraction (supports many models)"
+                                            placeholder="sk-or-v1-..."
+                                            getKeyUrl="https://openrouter.ai/keys"
+                                            onTest={testOpenRouterKey}
+                                        />
                                         <div className="text-xs text-muted-foreground p-3 bg-muted rounded-lg">
                                             <span className="font-semibold text-foreground">Note:</span> You need both a Firecrawl key (for scraping) and at least one LLM key (for data extraction).
                                         </div>
