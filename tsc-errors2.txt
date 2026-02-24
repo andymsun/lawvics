@@ -1,0 +1,2 @@
+﻿src/app/layout.tsx(5,31): error TS2307: Cannot find module '@vercel/speed-insights/next' or its corresponding type declarations.
+src/components/dashboard/views/BriefView.tsx(13,23): error TS2307: Cannot find module 'remark-gfm' or its corresponding type declarations.

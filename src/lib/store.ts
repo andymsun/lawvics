@@ -407,7 +407,7 @@ export const useLegalStore = create<LegalStore & StoreActions>((set) => ({
 // Settings Store (useSettingsStore)
 // ============================================================
 
-export type DataSource = 'mock' | 'llm-scraper' | 'official-api' | 'scraping-proxy' | 'system-api';
+export type DataSource = 'mock' | 'llm-scraper' | 'official-api' | 'scraping-proxy' | 'system-api' | 'firecrawl';
 export type ThemeColor = 'blue' | 'violet' | 'green' | 'rose' | 'orange';
 
 export interface SettingsState {
@@ -425,6 +425,8 @@ export interface SettingsState {
     legiscanApiKey: string;
     /** User's Scraping Service API key (e.g., ZenRows, ScrapingBee) */
     scrapingApiKey: string;
+    /** User's Firecrawl API key for firecrawl data source */
+    firecrawlApiKey: string;
     /** Enable simultaneous queries across all 50 jurisdictions */
     parallelFetch: boolean;
     /** Automatically run verification checks on returned statutes */
@@ -464,6 +466,8 @@ interface SettingsActions {
     setLegiscanApiKey: (key: string) => void;
     /** Set the Scraping Service API key */
     setScrapingApiKey: (key: string) => void;
+    /** Set the Firecrawl API key */
+    setFirecrawlApiKey: (key: string) => void;
     /** Set the active AI provider */
     setActiveAiProvider: (provider: 'openai' | 'gemini' | 'openrouter') => void;
     /** Set the OpenAI model */
@@ -475,9 +479,9 @@ interface SettingsActions {
     /** Set the batch size */
     setBatchSize: (size: number) => void;
     /** Update any boolean setting */
-    setSetting: <K extends keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openRouterApiKey' | 'openStatesApiKey' | 'legiscanApiKey' | 'scrapingApiKey' | 'themeColor' | 'openaiModel' | 'geminiModel' | 'openRouterModel' | 'activeAiProvider' | 'batchSize'>>(key: K, value: SettingsState[K]) => void;
+    setSetting: <K extends keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openRouterApiKey' | 'openStatesApiKey' | 'legiscanApiKey' | 'scrapingApiKey' | 'firecrawlApiKey' | 'themeColor' | 'openaiModel' | 'geminiModel' | 'openRouterModel' | 'activeAiProvider' | 'batchSize'>>(key: K, value: SettingsState[K]) => void;
     /** Toggle a boolean setting */
-    toggleSetting: (key: keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openRouterApiKey' | 'openStatesApiKey' | 'legiscanApiKey' | 'scrapingApiKey' | 'themeColor' | 'openaiModel' | 'geminiModel' | 'openRouterModel' | 'activeAiProvider' | 'batchSize'>) => void;
+    toggleSetting: (key: keyof Omit<SettingsState, 'dataSource' | 'openaiApiKey' | 'geminiApiKey' | 'openRouterApiKey' | 'openStatesApiKey' | 'legiscanApiKey' | 'scrapingApiKey' | 'firecrawlApiKey' | 'themeColor' | 'openaiModel' | 'geminiModel' | 'openRouterModel' | 'activeAiProvider' | 'batchSize'>) => void;
     /** Set the theme color */
     setThemeColor: (color: ThemeColor) => void;
 }
@@ -492,6 +496,7 @@ const DEFAULT_SETTINGS: SettingsState = {
     openStatesApiKey: '',
     legiscanApiKey: '',
     scrapingApiKey: '',
+    firecrawlApiKey: '',
     parallelFetch: true,
     autoVerify: true,
     showConfidence: true,
@@ -538,6 +543,7 @@ function persistSettings(settings: SettingsState): void {
             openStatesApiKey: settings.openStatesApiKey,
             legiscanApiKey: settings.legiscanApiKey,
             scrapingApiKey: settings.scrapingApiKey,
+            firecrawlApiKey: settings.firecrawlApiKey,
             parallelFetch: settings.parallelFetch,
             autoVerify: settings.autoVerify,
             showConfidence: settings.showConfidence,
@@ -590,6 +596,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
     setScrapingApiKey: (key) => {
         set({ scrapingApiKey: key });
+        persistSettings(get());
+    },
+
+    setFirecrawlApiKey: (key) => {
+        set({ firecrawlApiKey: key });
         persistSettings(get());
     },
 

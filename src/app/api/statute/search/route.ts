@@ -634,6 +634,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
         const openStatesApiKey = request.headers.get('x-openstates-key') || process.env.OPENSTATES_API_KEY || undefined;
         const legiscanApiKey = request.headers.get('x-legiscan-key') || process.env.LEGISCAN_API_KEY || undefined;
         const scrapingApiKey = request.headers.get('x-scraping-key') || process.env.ZENROWS_API_KEY || process.env.SCRAPINGBEE_API_KEY || undefined;
+        const firecrawlApiKey = request.headers.get('x-firecrawl-key') || process.env.FIRECRAWL_API_KEY || undefined;
         const activeProvider = request.headers.get('x-active-provider') as AiProvider | null;
         const aiModel = request.headers.get('x-ai-model') || undefined;
 
@@ -645,6 +646,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
             hasOpenStates: !!openStatesApiKey,
             hasLegiscan: !!legiscanApiKey,
             hasScraping: !!scrapingApiKey,
+            hasFirecrawl: !!firecrawlApiKey,
             activeProvider,
             aiModel
         });
@@ -756,6 +758,90 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
                 scrapingApiKey
             );
             debug.timeEnd('proxy-scrape');
+        } else if (dataSource === 'firecrawl') {
+            debug.log('Using FIRECRAWL mode');
+            if (!firecrawlApiKey) {
+                debug.error('No Firecrawl API key provided');
+                throw new Error('Firecrawl mode requires a Firecrawl API Key. Get one at firecrawl.dev');
+            }
+
+            const detectedProvider: AiProvider = activeProvider ||
+                (openRouterApiKey ? 'openrouter' : openaiApiKey ? 'openai' : 'gemini');
+
+            if (!openaiApiKey && !geminiApiKey && !openRouterApiKey) {
+                throw new Error('Firecrawl mode also requires an LLM API key (OpenAI, Gemini, or OpenRouter) for structured extraction.');
+            }
+
+            debug.time('firecrawl-scrape');
+
+            // Step 1: Use Firecrawl to get clean markdown from the state legislature URL
+            const legislatureUrl = STATE_LEGISLATURE_URLS[stateCode];
+            if (!legislatureUrl) throw new Error(`No legislature URL for ${stateCode}`);
+
+            const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${firecrawlApiKey}`,
+                },
+                body: JSON.stringify({
+                    url: legislatureUrl,
+                    formats: ['markdown'],
+                    waitFor: 3000,
+                }),
+            });
+
+            if (!firecrawlResponse.ok) {
+                const errBody = await firecrawlResponse.text().catch(() => 'Unknown error');
+                throw new Error(`Firecrawl API error (${firecrawlResponse.status}): ${errBody}`);
+            }
+
+            const firecrawlData = await firecrawlResponse.json();
+            const pageMarkdown = firecrawlData?.data?.markdown || '';
+
+            if (!pageMarkdown || pageMarkdown.length < 50) {
+                throw new Error(`Firecrawl returned insufficient content for ${stateCode}`);
+            }
+
+            // Step 2: Use existing LLM pipeline to extract structured statute from markdown
+            const truncatedContent = pageMarkdown.slice(0, 15000);
+
+            // Build LLM client (same pattern as llm-scraper)
+            let model;
+            const effectiveModel = aiModel || 'gpt-4o-mini';
+            if (detectedProvider === 'openai' && openaiApiKey) {
+                const openai = createOpenAI({ apiKey: openaiApiKey });
+                model = openai(effectiveModel);
+            } else if (detectedProvider === 'gemini' && geminiApiKey) {
+                const google = createGoogleGenerativeAI({ apiKey: geminiApiKey });
+                model = google(effectiveModel);
+            } else if (openRouterApiKey) {
+                const openrouter = createOpenAI({ apiKey: openRouterApiKey, baseURL: 'https://openrouter.ai/api/v1' });
+                model = openrouter(effectiveModel);
+            } else {
+                throw new Error('No valid LLM API key found for Firecrawl extraction');
+            }
+
+            const { object: extracted } = await generateObject({
+                model,
+                schema: z.object({
+                    citation: z.string().describe('The statute citation (e.g., "CA Code § 335.1")'),
+                    textSnippet: z.string().describe('A concise summary of the relevant statute text (2-3 sentences)'),
+                    effectiveDate: z.string().describe('The effective date of the statute, if available'),
+                    confidenceScore: z.number().min(0).max(100).describe('Confidence score from 0-100'),
+                }),
+                prompt: `You are a legal research assistant. Extract the most relevant statute about "${query}" for state ${stateCode} from this content.\n\nContent:\n${truncatedContent}\n\nReturn the statute citation, a concise text snippet, effective date, and your confidence score.`,
+            });
+
+            statute = {
+                stateCode,
+                citation: extracted.citation,
+                textSnippet: extracted.textSnippet,
+                effectiveDate: extracted.effectiveDate || 'Unknown',
+                confidenceScore: extracted.confidenceScore || 0,
+                sourceUrl: legislatureUrl,
+            };
+            debug.timeEnd('firecrawl-scrape');
         } else {
             debug.error('Unsupported data source:', dataSource);
             throw new Error(`Unsupported data source: ${dataSource}`);

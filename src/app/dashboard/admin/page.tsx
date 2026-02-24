@@ -539,6 +539,7 @@ export default function AdminPage() {
                                     <option value="system-api">System API (Managed)</option>
                                     <option value="llm-scraper">LLM Scraper (BYOK)</option>
                                     <option value="official-api">Official State API</option>
+                                    <option value="firecrawl">🔥 Firecrawl</option>
                                     <option value="mock">Mock Mode (Dev)</option>
                                 </select>
                             </div>

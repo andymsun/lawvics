@@ -96,6 +96,13 @@ export default function StatuteDetailPanel() {
                         Source: Lawvics Proprietary Systems
                     </div>
                 );
+            case 'firecrawl':
+                return (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-500/10 text-orange-600 dark:text-orange-400 text-xs font-medium border border-orange-200 dark:border-orange-800">
+                        <Zap className="w-3.5 h-3.5" />
+                        Source: Firecrawl
+                    </div>
+                );
             default: // mock
                 return (
                     <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 text-xs font-medium border border-green-200 dark:border-green-800">

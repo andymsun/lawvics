@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, Zap, AlertTriangle, Key, Eye, EyeOff, Database, Bot, Globe, Monitor, Moon, Sun, Layout, Sliders, ExternalLink, Check, Loader2, X, Cloud, Lock } from 'lucide-react';
+import { Settings, Zap, AlertTriangle, Key, Eye, EyeOff, Database, Bot, Globe, Monitor, Moon, Sun, Layout, Sliders, ExternalLink, Check, Loader2, X, Cloud, Lock, Flame } from 'lucide-react';
 import { useSettingsStore, DataSource, SettingsStore } from '@/lib/store';
 import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
@@ -290,6 +290,12 @@ const DataSourceSelector = ({ adminConfig }: { adminConfig: AdminConfig }) => {
             icon: Cloud,
             label: 'System API (Recommended)',
             description: 'Uses pre-configured server-side API keys. No setup needed.'
+        },
+        {
+            id: 'firecrawl',
+            icon: Flame,
+            label: 'Firecrawl',
+            description: 'AI-powered web scraping with JS rendering. Bypasses anti-bot.'
         }
     ];
 
@@ -940,6 +946,42 @@ export default function SettingsPage() {
                                             getKeyUrl="https://aistudio.google.com/app/apikey"
                                             onTest={testGeminiKey}
                                         />
+                                    </div>
+                                )}
+                                {settings.dataSource === 'firecrawl' && (
+                                    <div className="space-y-4 pt-4 border-t border-border animate-in fade-in slide-in-from-top-4">
+                                        <div className="text-sm text-muted-foreground p-3 bg-muted rounded-lg">
+                                            <span className="font-semibold text-foreground">How it works:</span> Firecrawl scrapes state legislature sites with JS rendering and anti-bot bypass, returning clean markdown. An LLM then extracts structured statute data from the content.
+                                        </div>
+                                        <ApiKeyInput
+                                            label="Firecrawl API Key"
+                                            value={settings.firecrawlApiKey}
+                                            onChange={settings.setFirecrawlApiKey}
+                                            helperText="Get your API key at firecrawl.dev"
+                                            placeholder="fc-..."
+                                            getKeyUrl="https://firecrawl.dev"
+                                            required={true}
+                                        />
+                                        <ApiKeyInput
+                                            label="OpenAI API Key (for extraction)"
+                                            value={settings.openaiApiKey}
+                                            onChange={settings.setOpenaiApiKey}
+                                            helperText="Used to extract structured statute data from scraped content"
+                                            getKeyUrl="https://platform.openai.com/api-keys"
+                                            onTest={testOpenAIKey}
+                                        />
+                                        <ApiKeyInput
+                                            label="Gemini API Key (alternative)"
+                                            value={settings.geminiApiKey}
+                                            onChange={settings.setGeminiApiKey}
+                                            helperText="Use Gemini instead of OpenAI for extraction"
+                                            placeholder="AIzp..."
+                                            getKeyUrl="https://aistudio.google.com/app/apikey"
+                                            onTest={testGeminiKey}
+                                        />
+                                        <div className="text-xs text-muted-foreground p-3 bg-muted rounded-lg">
+                                            <span className="font-semibold text-foreground">Note:</span> You need both a Firecrawl key (for scraping) and at least one LLM key (for data extraction).
+                                        </div>
                                     </div>
                                 )}
 

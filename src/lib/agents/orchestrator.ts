@@ -129,7 +129,7 @@ async function fetchStatuteFromApi(
     openaiApiKey: string = '' // Deprecated argument
 ): Promise<Statute> {
     const settings = useSettingsStore.getState();
-    const { dataSource, openaiApiKey: storeOpenAiKey, geminiApiKey, openRouterApiKey, openStatesApiKey, legiscanApiKey, scrapingApiKey } = settings;
+    const { dataSource, openaiApiKey: storeOpenAiKey, geminiApiKey, openRouterApiKey, openStatesApiKey, legiscanApiKey, scrapingApiKey, firecrawlApiKey } = settings;
 
     // 1. STRICT CLIENT-SIDE MOCK GUARD
     // If we are in mock mode, DO NOT attempt to hit the API at all...
@@ -182,6 +182,12 @@ async function fetchStatuteFromApi(
         // Optional: Hint to use OPENROUTER_API_KEY on server if needed
 
         // Allow client-side override if provided locally
+        if (openRouterApiKey) headers['x-openrouter-key'] = openRouterApiKey;
+    } else if (dataSource === 'firecrawl') {
+        // Firecrawl Mode: Send firecrawl key for scraping + LLM keys for structured extraction
+        if (firecrawlApiKey) headers['x-firecrawl-key'] = firecrawlApiKey;
+        if (storeOpenAiKey) headers['x-openai-key'] = storeOpenAiKey;
+        if (geminiApiKey) headers['x-gemini-key'] = geminiApiKey;
         if (openRouterApiKey) headers['x-openrouter-key'] = openRouterApiKey;
     }
 
@@ -455,7 +461,7 @@ async function processChunk(
 
     // For LLM-based modes:
     // Use PARALLEL individual calls for maximum speed (true swarm behavior)
-    if (dataSource === 'llm-scraper' || dataSource === 'scraping-proxy' || dataSource === 'system-api') {
+    if (dataSource === 'llm-scraper' || dataSource === 'scraping-proxy' || dataSource === 'system-api' || dataSource === 'firecrawl') {
         // Make parallel individual API calls for each state
         // This enables true swarm behavior: all states in chunk start simultaneously
         const promises = stateCodes.map((stateCode) =>
