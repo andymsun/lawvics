@@ -754,7 +754,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
                     body: JSON.stringify({
                         url: legislatureUrl,
                         formats: ['markdown'],
-                        waitFor: 3000,
+                        waitFor: 30000,
+                        timeout: 60000,
                     }),
                 });
 
@@ -865,7 +866,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<SearchRes
                 body: JSON.stringify({
                     url: legislatureUrl,
                     formats: ['markdown'],
-                    waitFor: 3000,
+                    waitFor: 30000,
+                    timeout: 60000,
                 }),
             });
 
